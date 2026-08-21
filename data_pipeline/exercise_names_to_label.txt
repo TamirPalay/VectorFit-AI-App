@@ -1,0 +1,306 @@
+# Exercises to be labeled by the pipeline script (label_exercises.py).
+# One exercise per line. Lines starting with # are ignored.
+# After labeling, each entry is appended to backend/app/data/exercises.json.
+# Target: ~230 exercises here + 37 hand-labeled = ~267 total in dataset.
+
+# ── Push / Chest ──────────────────────────────────────────────────────────────
+Cable Chest Fly
+Pec Deck Machine Fly
+Close-grip Bench Press
+Decline Bench Press
+Decline Dumbbell Press
+Incline Dumbbell Press
+Incline Dumbbell Fly
+Floor Press (Barbell)
+Floor Press (Dumbbell)
+Svend Press
+Landmine Press
+Cable Crossover
+Diamond Push-up
+Pike Push-up
+Incline Push-up
+Decline Push-up
+Wall Push-up
+Archer Push-up
+Clapping Push-up
+Wide-grip Push-up
+Pseudo-planche Push-up
+Deficit Push-up
+Ring Push-up
+Spiderman Push-up
+
+# ── Push / Shoulders ──────────────────────────────────────────────────────────
+Arnold Press
+Seated Overhead Press (Dumbbell)
+Z-Press (Barbell)
+Push Press (Barbell)
+Seated Behind-the-neck Press
+Upright Row (Barbell)
+Upright Row (Dumbbell)
+Upright Row (Cable)
+Cable Lateral Raise
+Front Raise (Dumbbell)
+Front Raise (Barbell)
+Cable Front Raise
+Plate Front Raise
+Leaning Lateral Raise
+Cable Rear Delt Fly
+Band Pull-apart
+Band Face Pull
+Prone Y Raise
+Prone T Raise
+Prone W Raise
+Landmine Lateral Raise
+Machine Shoulder Press
+Machine Lateral Raise
+Machine Rear Delt Fly
+
+# ── Push / Triceps ────────────────────────────────────────────────────────────
+Tricep Kickback (Dumbbell)
+Tricep Kickback (Cable)
+Close-grip Push-up
+Tricep Dip (Bench)
+Ring Dip
+Cable Overhead Tricep Extension
+EZ-bar Skull Crusher
+Tate Press
+JM Press
+Tricep Pushdown (Rope)
+Tricep Pushdown (V-bar)
+Single-arm Cable Tricep Extension
+Machine Tricep Extension
+
+# ── Pull / Back ───────────────────────────────────────────────────────────────
+T-bar Row
+Chest-supported Dumbbell Row
+Chest-supported Barbell Row
+Pendlay Row
+Meadows Row
+Single-arm Cable Row
+Straight-arm Pulldown
+Cable Rear Delt Row
+Wide-grip Pull-up
+Chin-up
+Neutral-grip Pull-up
+Weighted Pull-up
+Ring Pull-up
+Inverted Row
+Rack Pull
+Sumo Deadlift
+Trap Bar Deadlift
+Deficit Deadlift
+Pause Deadlift
+Romanian Deadlift (Dumbbell)
+Single-leg Romanian Deadlift (Dumbbell)
+Good Morning (Barbell)
+Snatch-grip Deadlift
+Yates Row
+Machine Seated Row (Wide grip)
+Machine Seated Row (Close grip)
+Machine Pulldown (Wide grip)
+Machine Pulldown (Neutral grip)
+Seal Row (Barbell)
+Helms Row (Dumbbell)
+Kroc Row
+
+# ── Pull / Biceps ─────────────────────────────────────────────────────────────
+Cable Bicep Curl (Straight bar)
+Cable Bicep Curl (Rope)
+Incline Dumbbell Curl
+Concentration Curl
+Preacher Curl (Barbell)
+Preacher Curl (Dumbbell)
+Spider Curl
+Zottman Curl
+Reverse Curl (Barbell)
+Reverse Curl (Dumbbell)
+Cable Hammer Curl
+Cross-body Hammer Curl
+21s (Barbell Curl)
+Machine Preacher Curl
+High Cable Curl
+Single-arm Cable Curl
+
+# ── Legs / Quad-dominant ──────────────────────────────────────────────────────
+Bulgarian Split Squat (Barbell)
+Bulgarian Split Squat (Dumbbell)
+Hack Squat Machine
+Sissy Squat
+Smith Machine Squat
+Pause Squat (Barbell)
+Box Squat (Barbell)
+Zercher Squat
+Safety Bar Squat
+Landmine Squat
+Step-up (Dumbbell)
+Step-up (Barbell)
+Box Step-up
+Lateral Step-up
+Reverse Lunge (Dumbbell)
+Reverse Lunge (Barbell)
+Walking Lunge (Dumbbell)
+Walking Lunge (Barbell)
+Lateral Lunge (Dumbbell)
+Curtsy Lunge
+Leg Extension Machine
+Sumo Squat (Dumbbell)
+Single-leg Leg Press
+Pistol Squat
+Wall Sit
+Box Jump
+Jump Squat
+Broad Jump
+Lateral Bound
+Depth Jump
+Tuck Jump
+
+# ── Legs / Posterior / Glutes ─────────────────────────────────────────────────
+Good Morning (Dumbbell)
+Single-leg Deadlift (Barbell)
+Single-leg Hip Thrust (Barbell)
+Single-leg Hip Thrust (Bodyweight)
+Glute Bridge (Bodyweight)
+Glute Bridge (Barbell)
+Banded Glute Bridge
+Cable Pull-through
+Donkey Kick
+Fire Hydrant
+Kickback Machine
+Glute Cable Kickback
+Hip Abductor Machine
+Hip Adductor Machine
+Clamshell (Band)
+Monster Walk (Band)
+Lateral Band Walk
+Sumo Deadlift (Dumbbell)
+Trap Bar Deadlift (Low Handle)
+Stiff-leg Deadlift
+Kang Squat
+
+# ── Legs / Hamstrings ─────────────────────────────────────────────────────────
+Seated Leg Curl Machine
+Nordic Hamstring Curl (Assisted)
+Stability Ball Leg Curl
+Glute-ham Raise
+Single-leg Stability Ball Leg Curl
+Cable Leg Curl
+
+# ── Legs / Calves ─────────────────────────────────────────────────────────────
+Seated Calf Raise
+Single-leg Calf Raise
+Leg Press Calf Raise
+Tibialis Raise
+Donkey Calf Raise
+
+# ── Core / Anti-extension ─────────────────────────────────────────────────────
+Dead Bug
+Bird Dog
+Ab Wheel Rollout
+Barbell Rollout
+Stability Ball Rollout
+Hollow Body Hold
+Dragon Flag
+Pike Hold (Rings)
+Plank (Forearm)
+Plank with Shoulder Tap
+RKC Plank
+Long-lever Plank
+
+# ── Core / Flexion ────────────────────────────────────────────────────────────
+Cable Crunch (Kneeling)
+Machine Crunch
+Decline Crunch
+Weighted Crunch
+Lying Leg Raise
+Reverse Crunch
+V-up
+Jackknife Sit-up
+Bicycle Crunch
+Flutter Kick
+Toes to Bar
+L-sit (Parallel bars)
+L-sit (Floor)
+
+# ── Core / Anti-rotation and Rotation ────────────────────────────────────────
+Pallof Press (Cable)
+Pallof Press (Band)
+Landmine Rotation
+Cable Woodchop (High to low)
+Cable Woodchop (Low to high)
+Rotational Medicine Ball Slam
+Side Plank
+Side Plank with Hip Dip
+Copenhagen Plank
+Suitcase Carry (Dumbbell)
+Farmers Walk (Dumbbell)
+Farmers Walk (Trap bar)
+
+# ── Core / Isometric and Spinal ───────────────────────────────────────────────
+Superman Hold
+Back Extension (Hyperextension bench)
+Reverse Hyperextension
+Jefferson Curl
+Good Morning (Seated)
+45-degree Back Extension
+
+# ── Full Body / Olympic and Power ─────────────────────────────────────────────
+Power Clean
+Hang Power Clean
+Power Snatch
+Hang Power Snatch
+Clean and Jerk
+Barbell Thruster
+Dumbbell Thruster
+Kettlebell Thruster
+Push Press (Dumbbell)
+Push Jerk
+Split Jerk
+
+# ── Full Body / Kettlebell ────────────────────────────────────────────────────
+Kettlebell Swing (Two-handed)
+Kettlebell Swing (Single-handed)
+Kettlebell Clean
+Kettlebell Press
+Kettlebell Snatch
+Kettlebell Goblet Squat
+Kettlebell Romanian Deadlift
+Kettlebell Figure-8
+Turkish Get-up
+Kettlebell Windmill
+Kettlebell Halo
+
+# ── Full Body / Functional and Conditioning ───────────────────────────────────
+Burpee
+Burpee Box Jump
+Mountain Climber
+Bear Crawl
+Inchworm
+Man-maker (Dumbbell)
+Renegade Row
+Devil Press
+Overhead Carry (Dumbbell)
+Waiter Walk
+Yoke Carry
+Zercher Carry
+Clean and Press (Barbell)
+Snatch-grip High Pull
+
+# ── Mobility and Rehab ────────────────────────────────────────────────────────
+Hip 90-90 Stretch
+Pigeon Pose
+World's Greatest Stretch
+Thoracic Rotation
+Cat-cow
+Glute Stretch (Figure-4)
+Hamstring Stretch (Lying)
+Hip Flexor Lunge Stretch
+Lat Stretch (Doorway)
+Chest Opener Stretch
+Band Dislocate
+Shoulder Internal Rotation Stretch
+Wall Slide
+Serratus Wall Slide
+Quadruped Hip Circle
+Squat to Stand
+Ankle Circles
+Calf Stretch (Wall)

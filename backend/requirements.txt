@@ -1,0 +1,33 @@
+# ── Web framework ──────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# ── Database ───────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.35
+alembic==1.13.2
+
+# ── Validation ─────────────────────────────────────────────────────────────────
+pydantic==2.9.2
+pydantic-settings==2.5.2
+email-validator==2.2.0
+
+# ── LLM clients ────────────────────────────────────────────────────────────────
+# Both Groq and Ollama expose an OpenAI-compatible API, so one client works for both
+openai==1.51.0
+groq==0.11.0
+
+# ── ML / Embeddings ────────────────────────────────────────────────────────────
+numpy==1.26.4
+faiss-cpu==1.8.0
+sentence-transformers==3.1.1
+scikit-learn==1.5.2
+
+# ── Data analysis (dashboard) ──────────────────────────────────────────────────
+pandas==2.2.3
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+httpx==0.27.2
+python-multipart==0.0.12
