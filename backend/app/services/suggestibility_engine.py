@@ -8,8 +8,15 @@ from sqlalchemy.orm import Session
 from app.models.rejection import RejectionEvent
 from app.models.user import Injury
 
-_COOLDOWN_DAYS = {"too_sore": 3, "too_tired": 2}
-_PREFERENCE_DELTA = {"dont_like": -0.15, "too_easy": -0.10, "too_hard": -0.10, "no_equipment": -0.05}
+_COOLDOWN_DAYS = {"too_sore": 3, "too_tired": 2, "not_today": 1}
+_PREFERENCE_DELTA = {
+    "dont_like":   -0.15,
+    "too_easy":    -0.10,
+    "too_hard":    -0.10,
+    "bad_form":    -0.08,
+    "too_long":    -0.05,
+    "no_equipment": -0.05,
+}
 _MIN_PREFERENCE_SCORE = 0.10
 
 _BODY_PART_FLAGS = {

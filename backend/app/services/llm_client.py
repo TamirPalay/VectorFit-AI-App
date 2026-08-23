@@ -27,19 +27,27 @@ def _build_client() -> AsyncOpenAI:
             api_key=settings.groq_api_key,
             base_url="https://api.groq.com/openai/v1",
         )
+    elif provider == "gemini":
+        # Gemini exposes an OpenAI-compatible REST endpoint
+        return AsyncOpenAI(
+            api_key=settings.gemini_api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
     elif provider == "ollama":
         return AsyncOpenAI(
             api_key="ollama",  # Ollama ignores the key but the SDK requires a non-empty value
             base_url=f"{settings.ollama_base_url}/v1",
         )
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: '{provider}'. Use 'groq' or 'ollama'.")
+        raise ValueError(f"Unknown LLM_PROVIDER: '{provider}'. Use 'groq', 'gemini', or 'ollama'.")
 
 
 def _active_model() -> str:
     provider = settings.llm_provider.lower()
     if provider == "groq":
         return settings.groq_model
+    if provider == "gemini":
+        return settings.gemini_model
     return settings.ollama_model
 
 

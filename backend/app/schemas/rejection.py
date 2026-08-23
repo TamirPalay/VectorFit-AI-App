@@ -3,7 +3,11 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, field_validator
 
-REJECTION_REASONS = {"too_sore", "too_tired", "dont_like", "too_easy", "too_hard", "no_equipment", "other"}
+REJECTION_REASONS = {
+    "too_sore", "too_tired", "not_today",
+    "dont_like", "too_easy", "too_hard", "too_long", "bad_form", "no_equipment",
+    "other",
+}
 
 
 class RejectionCreate(BaseModel):

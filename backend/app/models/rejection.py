@@ -27,12 +27,19 @@ def _now() -> datetime:
 
 
 REJECTION_REASONS = {
-    "dont_like",
-    "hurts",
-    "not_enough_time",
-    "no_equipment",
-    "too_easy",
-    "too_hard",
+    # Cooldown triggers (temporary, auto-clear)
+    "too_sore",       # 3-day cooldown — muscle soreness
+    "too_tired",      # 2-day cooldown — general fatigue
+    "not_today",      # 1-day soft skip — no lasting effect
+    # Preference penalties (permanent but gradual)
+    "dont_like",      # -0.15 — general dislike
+    "too_easy",       # -0.10 — needs progression
+    "too_hard",       # -0.10 — needs regression
+    "too_long",       # -0.05 — time constraint
+    "bad_form",       # -0.08 — not confident in technique
+    "no_equipment",   # -0.05 — missing kit
+    # Catch-all
+    "other",
 }
 
 PAIN_TYPES = {
