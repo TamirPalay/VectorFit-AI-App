@@ -3,10 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 from sqlalchemy.orm import Session
 
+from app.data.muscles import MUSCLES
 from app.ml.embeddings import ExerciseIndex
 from app.services.suggestibility_engine import SuggestibilityEngine, SuggestibilityState
+
+COMPLEMENT_COVERAGE_THRESHOLD = 0.85  # suggest complements when coverage is below this
 
 
 @dataclass
@@ -98,6 +102,76 @@ class SubstitutionEngine:
 
         substitutes.sort(key=lambda s: s.rank_score, reverse=True)
         return substitutes
+
+    def find_complements(
+        self,
+        user_id: int,
+        target_id: str,
+        substitute_id: str,
+        top_k: int = 4,
+    ) -> list[dict]:
+        """
+        Find exercises that fill the activation gap left by a primary substitute.
+
+        Computes the residual vector (what the substitute leaves uncovered),
+        queries FAISS for exercises targeting those muscles, filters through
+        suggestibility, and returns the top_k ranked by combined coverage
+        (substitute + complement together).
+
+        Returns a list of dicts: {exercise, combined_coverage, preference_score}
+        """
+        target_ex = self._index.get_by_id(target_id)
+        sub_ex = self._index.get_by_id(substitute_id)
+        if not target_ex or not sub_ex:
+            return []
+
+        target_raw = np.array(
+            [target_ex["muscle_activation"].get(m, 0.0) for m in MUSCLES],
+            dtype=np.float32,
+        )
+        sub_raw = np.array(
+            [sub_ex["muscle_activation"].get(m, 0.0) for m in MUSCLES],
+            dtype=np.float32,
+        )
+        residual = np.maximum(0.0, target_raw - sub_raw)
+
+        if np.linalg.norm(residual) < 1e-6:
+            return []
+
+        candidates = self._index.find_similar_to_vector(
+            query_vec=residual,
+            top_k=top_k + 10,
+            exclude_ids={target_id, substitute_id},
+        )
+
+        candidate_exercises = [n["exercise"] for n in candidates]
+        sg_results = self._suggestibility.batch_compute(user_id, candidate_exercises)
+        result_map = {r.exercise_id: r for r in sg_results}
+
+        complements: list[dict] = []
+        for n in candidates:
+            ex = n["exercise"]
+            ex_id = ex["id"]
+            sg = result_map.get(ex_id)
+            if sg is None:
+                continue
+            if sg.state in (SuggestibilityState.SUPPRESSED, SuggestibilityState.COOLDOWN):
+                continue
+
+            combined_coverage = self._index.compute_coverage(
+                target_id=target_id,
+                candidate_ids=[substitute_id, ex_id],
+            )
+            complements.append({
+                "exercise": ex,
+                "combined_coverage": round(combined_coverage, 4),
+                "preference_score": sg.preference_score,
+            })
+            if len(complements) >= top_k:
+                break
+
+        complements.sort(key=lambda c: c["combined_coverage"], reverse=True)
+        return complements
 
     def find_substitutes_for_set(
         self,

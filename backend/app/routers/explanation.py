@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.services.substitution_engine import SubstitutionEngine
+from app.services.substitution_engine import SubstitutionEngine, COMPLEMENT_COVERAGE_THRESHOLD
 from app.services.suggestibility_engine import SuggestibilityEngine
 from app.services.explanation_service import explain_substitution_set
 
@@ -66,7 +66,22 @@ async def explain_substitutes(
             ),
         }
 
-    explained = await explain_substitution_set(original, substitutes, sg_result)
+    # For substitutes with coverage below threshold, find complementary exercises
+    complements_per_sub: dict[str, list[dict]] = {}
+    for sub in substitutes:
+        if sub.coverage < COMPLEMENT_COVERAGE_THRESHOLD:
+            complements = sub_engine.find_complements(
+                user_id=user_id,
+                target_id=exercise_id,
+                substitute_id=sub.exercise["id"],
+                top_k=4,
+            )
+            if complements:
+                complements_per_sub[sub.exercise["id"]] = complements
+
+    explained = await explain_substitution_set(
+        original, substitutes, sg_result, complements_per_sub
+    )
 
     return {
         "original": original,
