@@ -36,6 +36,9 @@ data_pipeline/*.log
 .DS_Store
 Thumbs.db
 
+# Claude Code — local session data, never commit
+.claude/
+
 # IDEs
 .vscode/
 .idea/

@@ -114,6 +114,9 @@ class Injury(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Soft flag: False once healed_at is set. Used for quick DB filtering.
 
+    # JSON list of force_direction values blocked by this injury, e.g. '["against_gravity"]'
+    restricted_force_directions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
