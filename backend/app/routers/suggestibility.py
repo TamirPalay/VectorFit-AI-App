@@ -44,17 +44,23 @@ def _result_to_dict(r: SuggestibilityResult) -> dict:
 def log_rejection(
     user_id: int,
     body: RejectionCreate,
+    request: Request = None,
     db: Session = Depends(get_db),
 ):
     _get_user_or_404(user_id, db)
+    index = request.app.state.exercise_index
+    ex = index.get_by_id(body.exercise_id)
+    if ex is None:
+        raise HTTPException(404, f"Exercise '{body.exercise_id}' not found")
     event = RejectionEvent(
         user_id=user_id,
         exercise_id=body.exercise_id,
+        exercise_name=ex["name"],
         reason=body.reason,
         pain_level=body.pain_level,
         pain_type=body.pain_type,
         body_area=body.body_area,
-        recovery_expectation=body.recovery_expectation,
+        recovery_expectation_days=body.recovery_expectation,
         note=body.note,
         created_at=datetime.now(timezone.utc),
     )

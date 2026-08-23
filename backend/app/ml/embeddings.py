@@ -283,6 +283,10 @@ class ExerciseIndex:
         covered = float(np.minimum(combined, raw_target).sum())
         return min(covered / target_sum, 1.0)
 
+    @property
+    def exercises(self) -> list[dict]:
+        return self._exercises
+
     def all_exercises(self) -> list[dict]:
         return list(self._exercises)
 
