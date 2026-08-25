@@ -7,14 +7,16 @@ sqlalchemy==2.0.35
 alembic==1.13.2
 
 # ── Validation ─────────────────────────────────────────────────────────────────
-pydantic==2.9.2
+pydantic==2.12.5
 pydantic-settings==2.5.2
 email-validator==2.2.0
 
 # ── LLM clients ────────────────────────────────────────────────────────────────
-# Both Groq and Ollama expose an OpenAI-compatible API, so one client works for both
+# Groq and Ollama expose an OpenAI-compatible API, so one client works for both.
+# Gemini uses Google's native SDK (the OpenAI-compat shim doesn't work with this key format).
 openai==1.51.0
 groq==0.11.0
+google-genai==2.19.0
 
 # ── ML / Embeddings ────────────────────────────────────────────────────────────
 numpy==1.26.4
@@ -29,5 +31,5 @@ seaborn==0.13.2
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
-httpx==0.27.2
+httpx==0.28.1
 python-multipart==0.0.12

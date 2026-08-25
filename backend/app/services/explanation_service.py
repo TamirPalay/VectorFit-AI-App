@@ -1,9 +1,10 @@
 """
 Explanation service — Stage 6.
 
-The LLM narrates pre-computed substitution data in plain English with
-the tone of a personal trainer. All safety and ranking decisions happen
-in SuggestibilityEngine and SubstitutionEngine — the LLM only writes the text.
+The LLM narrates pre-computed substitution data as a short, coach-voiced
+tooltip (2-3 sentences, stats woven in as percentages). All safety and
+ranking decisions happen in SuggestibilityEngine and SubstitutionEngine —
+the LLM only writes the text.
 """
 
 from __future__ import annotations
@@ -13,24 +14,23 @@ from app.services.substitution_engine import Substitute
 from app.services.suggestibility_engine import SuggestibilityResult, SuggestibilityState
 
 _SYSTEM_PROMPT = """\
-You are a knowledgeable, encouraging personal trainer writing exercise substitution explanations.
-Your job is to explain — in the tone of a supportive coach — why an exercise was swapped, \
-what the substitute offers, and how to approach it safely.
+You are a knowledgeable, encouraging personal trainer writing short exercise-swap explanations \
+for a tap-to-reveal tooltip in a fitness app. The user taps a suggested exercise to see what got \
+swapped out and why — write it in your voice as their coach, not a clinical printout.
 
 Rules:
-- Write 3–5 sentences. No bullet points, no headers, no markdown.
-- Use the actual exercise names and the numbers you are given. Never invent data.
-- Reference specific muscles when relevant (e.g. "chest, triceps, anterior deltoid").
-- Explain the injury/restriction in plain language — not medical jargon.
-- Always include a brief safety reminder (e.g. if you feel pain, stop).
-- If complement exercises are listed, name them explicitly and say the user can \
-  pair the primary substitute with any one of them to recover the missing activation. \
-  Say something like "to cover the remaining X%, pair it with [complement names]."
+- 2–3 sentences total, tight enough to read at a glance. Warm, direct, first-person ("I swapped...", \
+  "your..."). No headers, no bullet points, no markdown, no exclamation points.
+- Weave the numbers into the first sentence naturally — similarity %, coverage %, and the top 2–3 \
+  muscles involved as percentages (e.g. "chest at 85%"). Don't just list stats.
+- One sentence on why the swap makes sense given the injury/cooldown/preference reason, in plain \
+  language — not medical jargon.
+- If complements are listed, name them and mention the combined coverage % as how to make up the gap.
 - If no complements are listed and coverage is below 85%, note the gap briefly.
-- If the original exercise could be attempted in a modified/safer form, \
-  briefly suggest how (e.g. on knees, lighter weight, reduced range of motion) — \
-  but only if the original is blocked by preference or cooldown, not an active injury.
-- Keep the tone warm, direct, and practical — like a trainer who knows your history.\
+- Close with a short, encouraging safety cue in coach voice (not a clinical command).
+- If the original is blocked by preference or cooldown (not an active injury), you may suggest a \
+  modified/safer version of the original instead of the safety cue.
+- Never invent data not given.\
 """
 
 _FEW_SHOT = [
@@ -43,19 +43,16 @@ Similarity: 0.960 (96% muscle match)
 Coverage: 0.933 (93% of push-up's total muscle activation)
 Suppression reason: right shoulder injury — joint stress: high_shoulder_flexion_under_load; force direction 'against_gravity' restricted
 Preference score: 1.0
-Top muscles matched: chest (0.85), triceps (0.70), anterior_deltoid (0.65)\
+Top muscles matched: chest (85%), triceps (70%), anterior_deltoid (65%)\
 """,
     },
     {
         "role": "assistant",
         "content": (
-            "I'm swapping push-ups for the Barbell Bench Press while your right shoulder is healing. "
-            "The issue with push-ups isn't the muscles — it's the mechanics: you're pushing your entire bodyweight against gravity, "
-            "which puts a lot of stress on the rotator cuff and shoulder joint in exactly the way your injury doesn't like right now. "
-            "On the bench, the rack takes that load off — you're just moving the bar, not your whole body — so your chest, triceps, "
-            "and front delts get 96% of the same stimulus with 93% of the activation, at a fraction of the shoulder stress. "
-            "Start lighter than you think you need to, keep your shoulder blades pinched back throughout, and rack it immediately "
-            "if you feel any discomfort in that shoulder."
+            "I'm moving you from push-ups to the Barbell Bench Press — it's a 96% match at 93% coverage, "
+            "still hitting chest (85%), triceps (70%), and front delts (65%) just like the push-up did. "
+            "The bench takes your bodyweight out of the equation, so that against-gravity load on your right "
+            "shoulder is gone. Start light, keep your shoulder blades pinned back, and ease off if that shoulder talks to you."
         ),
     },
     {
@@ -67,31 +64,28 @@ Similarity: 0.945 (94% muscle match)
 Coverage: 0.902 (90% of pull-up's total muscle activation)
 Suppression reason: Cooldown until tomorrow (too_sore 1 day ago)
 Preference score: 1.0
-Top muscles matched: lats (0.90), rhomboids (0.60), biceps (0.55)\
+Top muscles matched: lats (90%), rhomboids (60%), biceps (55%)\
 """,
     },
     {
         "role": "assistant",
         "content": (
-            "Your lats are still recovering from yesterday's session, so I'm giving them a gentler ride today with the Lat Pulldown. "
-            "It hits the same primary muscles — lats, rhomboids, and biceps — at 94% similarity and 90% of your usual pull-up activation, "
-            "but you control the weight, which means you can ease up as needed and avoid grinding through soreness. "
-            "Keep the weight moderate, focus on the squeeze at the bottom, and don't let your ego load the stack. "
-            "If you're feeling decent by tomorrow, pull-ups will be back in rotation — but if you still feel that tightness, "
-            "give it one more day on the machine."
+            "Swapping pull-ups for the Lat Pulldown today — 94% similarity, 90% coverage, still hitting lats (90%), "
+            "rhomboids (60%), and biceps (55%). You control the weight on the stack, so you can ease up instead of "
+            "grinding through yesterday's soreness. Keep it moderate and we'll get you back on the bar once that tightness clears up."
         ),
     },
 ]
 
 
 def _top_muscles(muscle_activation: dict, n: int = 4) -> str:
-    """Return a comma-separated string of the top n muscles by activation value."""
+    """Return a comma-separated string of the top n muscles by activation value, as percentages."""
     top = sorted(
         [(m, v) for m, v in muscle_activation.items() if v > 0],
         key=lambda x: x[1],
         reverse=True,
     )[:n]
-    return ", ".join(f"{m.replace('_', ' ')} ({v})" for m, v in top)
+    return ", ".join(f"{m.replace('_', ' ')} ({int(round(v * 100))}%)" for m, v in top)
 
 
 def _build_user_message(
@@ -153,7 +147,7 @@ async def explain_substitution(
     ]
 
     try:
-        response = await llm_chat(messages=messages, temperature=0.5, max_tokens=500)
+        response = await llm_chat(messages=messages, temperature=0.5, max_tokens=700)
         return response.choices[0].message.content.strip()
     except Exception:
         if complements:
