@@ -20,23 +20,28 @@ _PREFERENCE_DELTA = {
 _MIN_PREFERENCE_SCORE = 0.10
 
 _BODY_PART_FLAGS = {
-    "shoulder": {"high_shoulder_flexion_under_load", "shoulder_impingement_risk", "rotator_cuff_load"},
-    "rotator": {"high_shoulder_flexion_under_load", "shoulder_impingement_risk", "rotator_cuff_load"},
-    "elbow": {"elbow_flexion_load", "wrist_extension_load"},
-    "wrist": {"wrist_extension_load"},
-    "knee": {"high_knee_flexion_load", "valgus_knee_stress", "patellar_tendon_load"},
-    "patellar": {"patellar_tendon_load", "high_knee_flexion_load"},
-    "lower back": {"lumbar_compression", "lumbar_shear", "spinal_flexion_under_load"},
-    "lumbar": {"lumbar_compression", "lumbar_shear", "spinal_flexion_under_load"},
-    "spine": {"lumbar_compression", "lumbar_shear", "spinal_flexion_under_load"},
-    "hip": {"hip_flexion_load"},
-    "neck": {"cervical_load"},
-    "cervical": {"cervical_load"},
-    "ankle": {"ankle_dorsiflexion_load"},
-    "achilles": {"ankle_dorsiflexion_load"},
-    "hamstring": {"hamstring_peak_tension"},
-    "groin": {"hip_adductor_load"},
-    "adductor": {"hip_adductor_load"},
+    # Keys must match the actual joint_stress_flags vocabulary in exercises.json
+    # (verified against the dataset — see Stage 7 notes on the previous
+    # mismatched version of this table, which silently matched nothing for
+    # knee/elbow/wrist/hip/neck/ankle injuries).
+    "shoulder": {"high_shoulder_flexion_under_load", "rotator_cuff_under_load", "shoulder_abduction_under_load"},
+    "rotator": {"high_shoulder_flexion_under_load", "rotator_cuff_under_load", "shoulder_abduction_under_load"},
+    "elbow": {"elbow_flexion_under_load", "elbow_extension_under_load"},
+    "wrist": {"wrist_extension_under_load", "wrist_flexion_under_load"},
+    "knee": {"knee_extension_under_load", "knee_flexion_under_load", "knee_valgus_risk"},
+    "patellar": {"knee_extension_under_load", "knee_valgus_risk"},
+    "lower back": {"lumbar_compression", "lumbar_shear", "lumbar_rotation_load"},
+    "lumbar": {"lumbar_compression", "lumbar_shear", "lumbar_rotation_load"},
+    "spine": {"lumbar_compression", "lumbar_shear", "lumbar_rotation_load"},
+    "hip": {"hip_flexion_under_load"},
+    "neck": {"cervical_spine_load"},
+    "cervical": {"cervical_spine_load"},
+    "ankle": {"ankle_plantar_flexion_load"},
+    "achilles": {"ankle_plantar_flexion_load"},
+    # No dedicated hamstring/groin/adductor flags exist in the current dataset;
+    # hamstring strain is approximated via the hip/knee flexion flags it's
+    # clinically tied to during hinge movements.
+    "hamstring": {"hip_flexion_under_load", "knee_flexion_under_load"},
 }
 
 

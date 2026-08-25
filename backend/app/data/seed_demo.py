@@ -1,10 +1,10 @@
 """
 Demo seeder — run once before starting the server.
 
-Creates:
-  • 1 user  — Tamir, 24, right shoulder injury
-  • 1 active right shoulder injury (suppresses push_up, overhead_press)
-  • 5 rejection events covering all four suggestibility states
+Creates three test users:
+  • Tamir  — 24, intermediate, active right shoulder injury (all 4 suggestibility states)
+  • Morgan — 30, beginner, no injuries — control user just starting a fitness journey
+  • Jordan — 27, intermediate, minor left patellar tendon injury (mirrors Tamir's case for legs)
 
 Usage (from backend/ directory):
     python -m app.data.seed_demo
@@ -32,11 +32,10 @@ def _ago(**kw) -> datetime:
     return NOW - timedelta(**kw)
 
 
-def seed(db) -> None:
+def seed_tamir(db) -> None:
     existing = db.query(_u.User).filter(_u.User.email == "tamir@demo.vectorfit").first()
     if existing:
-        print(f"Demo user already exists (id={existing.id}) — skipping seed.")
-        print("To re-seed: delete vectorfit.db and run again.")
+        print(f"Tamir already exists (id={existing.id}) — skipping.")
         return
 
     # ── User ──────────────────────────────────────────────────────────────────
@@ -210,9 +209,166 @@ Try these in /docs (replace {uid} with the user id above):
 """)
 
 
+def seed_control_user(db) -> None:
+    """Morgan — 30, beginner, no injuries, no rejection history. A clean
+    baseline for comparing against Tamir/Jordan: every exercise should come
+    back ELIGIBLE, and the daily-program generator should never trigger a
+    substitution/tooltip for this user."""
+    existing = db.query(_u.User).filter(_u.User.email == "morgan@demo.vectorfit").first()
+    if existing:
+        print(f"Morgan already exists (id={existing.id}) — skipping.")
+        return
+
+    user = _u.User(
+        name="Morgan",
+        email="morgan@demo.vectorfit",
+        age=30,
+        weight_kg=70.0,
+        height_cm=170.0,
+        fitness_level="beginner",
+        experience_level="beginner",
+        days_per_week=3,
+        minutes_per_session=30,
+        goals_json=json.dumps(["general_fitness", "weight_loss"]),
+        equipment_json=json.dumps(["bodyweight", "dumbbells"]),
+        movement_preferences_json=json.dumps(["bodyweight", "free_weights"]),
+        created_at=_ago(days=1),
+        updated_at=_ago(days=1),
+    )
+    db.add(user)
+    db.commit()
+
+    print(f"""
+Seeded successfully
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+User:     Morgan  (id={user.id})  — control, no injuries, no history
+Email:    morgan@demo.vectorfit
+Goals:    general_fitness, weight_loss
+Equipment: bodyweight, dumbbells only
+
+Everything for this user should be ELIGIBLE — good baseline to diff against
+Tamir/Jordan when checking that injury/preference filtering is actually doing
+something (rather than every user just happening to look the same).
+  GET /users/{user.id}/suggestibility/push_up   → should be ELIGIBLE
+  POST /users/{user.id}/daily-program           → should show zero substitutions
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+""")
+
+
+def seed_leg_injury_user(db) -> None:
+    """Jordan — 27, intermediate, minor left knee injury. Mirrors Tamir's
+    shoulder case for the legs: against_gravity squat/lunge variants are
+    blocked by force_direction, and leg_extension_machine (supported, but
+    still knee_extension_under_load) is blocked via the joint-flag match —
+    exercising both suppression paths independently."""
+    existing = db.query(_u.User).filter(_u.User.email == "jordan@demo.vectorfit").first()
+    if existing:
+        print(f"Jordan already exists (id={existing.id}) — skipping.")
+        return
+
+    user = _u.User(
+        name="Jordan",
+        email="jordan@demo.vectorfit",
+        age=27,
+        weight_kg=68.0,
+        height_cm=165.0,
+        fitness_level="intermediate",
+        experience_level="intermediate",
+        days_per_week=4,
+        minutes_per_session=45,
+        goals_json=json.dumps(["strength", "muscle_gain"]),
+        equipment_json=json.dumps(["dumbbells", "barbell", "squat_rack", "bench", "machines"]),
+        movement_preferences_json=json.dumps(["free_weights", "machines"]),
+        created_at=_ago(days=10),
+        updated_at=_ago(days=10),
+    )
+    db.add(user)
+    db.flush()
+
+    knee = _u.Injury(
+        user_id=user.id,
+        # Deliberately "patellar tendon", not "knee" — flags_for_body_part()
+        # does substring matching, and the generic "knee" keyword implies a
+        # broader flag set (including knee_flexion_under_load) that would also
+        # suppress leg_press, defeating the point of it as the safe substitute.
+        body_part="left patellar tendon",
+        severity="mild",
+        pain_type="dull_stiff",
+        recovery_expectation_days=14,
+        notes=(
+            "Mild patellar tendon irritation. Avoid deep bodyweight-loaded knee "
+            "flexion (squats, lunges, jumps) and open-chain knee extension under "
+            "load (leg extension machine). Leg press and hack squat machine are "
+            "fine with light-moderate load."
+        ),
+        healed_at=None,
+        is_active=True,
+        restricted_force_directions_json=json.dumps(["against_gravity"]),
+        created_at=_ago(days=4),
+        updated_at=_ago(days=4),
+    )
+    db.add(knee)
+
+    rejections = [
+        # bench press: too_sore 1 day ago → COOLDOWN. Deliberately not a leg
+        # exercise — anything against_gravity or knee-flagged is already
+        # SUPPRESSED by the injury, and suppression outranks cooldown, so an
+        # overlapping pick would never actually surface COOLDOWN.
+        RejectionEvent(
+            user_id=user.id,
+            exercise_id="barbell_bench_press",
+            exercise_name="Barbell Bench Press",
+            reason="too_sore",
+            pain_level=2,
+            body_area="chest",
+            note="Chest still fatigued from yesterday's session",
+            created_at=_ago(days=1),
+        ),
+        # barbell_curl: dont_like → PREFERENCE_PENALIZED
+        RejectionEvent(
+            user_id=user.id,
+            exercise_id="barbell_curl",
+            exercise_name="Barbell Curl",
+            reason="dont_like",
+            note="Never feels like it's doing much",
+            created_at=_ago(days=6),
+        ),
+    ]
+    for r in rejections:
+        db.add(r)
+    db.commit()
+
+    print(f"""
+Seeded successfully
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+User:     Jordan  (id={user.id})
+Email:    jordan@demo.vectorfit
+Injury:   left patellar tendon, mild — active since 4 days ago
+          restricted: against_gravity force direction
+
+Suggestibility states to demo:
+  barbell_back_squat     → SUPPRESSED  (force_direction: against_gravity)
+  lunge                  → SUPPRESSED  (force_direction: against_gravity)
+  leg_extension_machine  → SUPPRESSED  (joint flag: knee_extension_under_load — supported, so
+                                        this one only trips via the flag match, not force_direction)
+  leg_press              → ELIGIBLE    (supported, no knee_extension/valgus flag — the safe swap)
+  barbell_bench_press    → COOLDOWN    (too_sore 1 day ago, clears in 2 days)
+  barbell_curl           → PREFERENCE_PENALIZED  (dont_like, score=0.85)
+
+Try these in /docs (replace {user.id} with the user id above):
+  GET /users/{user.id}/suggestibility/barbell_back_squat
+  GET /users/{user.id}/suggestibility/leg_extension_machine
+  GET /users/{user.id}/substitute/barbell_back_squat
+  GET /users/{user.id}/explain/barbell_back_squat
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+""")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
-        seed(db)
+        seed_tamir(db)
+        seed_control_user(db)
+        seed_leg_injury_user(db)
     finally:
         db.close()

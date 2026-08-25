@@ -9,7 +9,7 @@ import app.models.user  # noqa: F401
 import app.models.workout_log  # noqa: F401
 import app.models.rejection  # noqa: F401
 
-from app.routers import profile, exercises, suggestibility, substitution, explanation
+from app.routers import profile, exercises, suggestibility, substitution, explanation, daily_program
 
 app = FastAPI(
     title="VectorFit API",
@@ -30,6 +30,7 @@ app.include_router(exercises.router)
 app.include_router(suggestibility.router)
 app.include_router(substitution.router)
 app.include_router(explanation.router)
+app.include_router(daily_program.router)
 
 
 @app.on_event("startup")
