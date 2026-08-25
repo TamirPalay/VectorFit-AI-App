@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-1.5-flash"  # live chat model (separate from labeling)
+    gemini_model: str = "gemini-3.6-flash"  # live chat model (separate from labeling)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:70b"
 
