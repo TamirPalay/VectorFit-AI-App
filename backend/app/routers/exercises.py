@@ -7,6 +7,9 @@ These endpoints are used by the custom builder's search and the dashboard.
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.data.muscles import BODY_PART_NAMES, FORCE_DIRECTIONS, MOVEMENT_PATTERNS, MUSCLES
+from app.services.exercise_filters import ExerciseQuery, apply_filters, compute_facets
+
 router = APIRouter(prefix="/exercises", tags=["exercises"])
 
 
@@ -17,36 +20,69 @@ def _get_index(request: Request):
     return index
 
 
+@router.get("/filters")
+def list_filter_options():
+    """The vocabularies the quick-filter chips can use."""
+    return {
+        "body_part": BODY_PART_NAMES,
+        "muscle": MUSCLES,
+        "movement_pattern": sorted(MOVEMENT_PATTERNS),
+        "force_direction": sorted(FORCE_DIRECTIONS),
+        "mechanic": ["compound", "isolation"],
+        "equipment_match": ["uses_any", "doable_with"],
+        "sort": ["relevance", "name", "compound_first"],
+    }
+
+
 @router.get("")
 def list_exercises(
     request: Request,
-    movement_pattern: str | None = Query(None),
-    equipment: str | None = Query(None, description="Filter by a single equipment item"),
-    muscle: str | None = Query(None, description="Filter by a muscle with activation > 0.3"),
+    q: str | None = Query(None, description="Free-text match on name + description"),
+    body_part: list[str] = Query(default=[], description="e.g. chest, back, legs (OR-combined)"),
+    muscle: list[str] = Query(default=[], description="Exact muscle id, activation >= 0.3 (OR-combined)"),
+    movement_pattern: list[str] = Query(default=[], description="push/pull/hinge/squat/carry/core (OR-combined)"),
+    equipment: list[str] = Query(default=[], description="Equipment items"),
+    equipment_match: str = Query("uses_any", pattern="^(uses_any|doable_with)$"),
+    force_direction: list[str] = Query(default=[], description="against_gravity/supported/horizontal/vertical"),
+    mechanic: str | None = Query(None, pattern="^(compound|isolation)$"),
+    exclude_ids: list[str] = Query(default=[], description="Exercise ids to omit (e.g. already added)"),
+    sort: str = Query("relevance", pattern="^(relevance|name|compound_first)$"),
+    facets: bool = Query(False, description="Also return chip counts for the current text query"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     """
-    List exercises with optional filters.
-    All filters are AND-combined.
+    Search / browse the exercise dataset. All filters are AND-combined; values
+    within a single multi-value filter are OR-combined. Deterministic, no LLM.
     """
     index = _get_index(request)
-    exercises = index.all_exercises()
+    all_exercises = index.all_exercises()
 
-    if movement_pattern:
-        exercises = [e for e in exercises if e["movement_pattern"] == movement_pattern]
-    if equipment:
-        exercises = [e for e in exercises if equipment in e["equipment_required"]]
-    if muscle:
-        exercises = [
-            e for e in exercises
-            if e["muscle_activation"].get(muscle, 0.0) >= 0.3
-        ]
+    query = ExerciseQuery(
+        q=q,
+        body_parts=body_part,
+        muscles=muscle,
+        equipment=equipment,
+        equipment_match=equipment_match,
+        movement_patterns=movement_pattern,
+        force_directions=force_direction,
+        mechanic=mechanic,
+        exclude_ids=set(exclude_ids),
+        sort=sort,
+    )
+    filtered = apply_filters(all_exercises, query)
 
-    total = len(exercises)
-    page = exercises[offset : offset + limit]
-
-    return {"total": total, "offset": offset, "exercises": page}
+    body = {
+        "total": len(filtered),
+        "offset": offset,
+        "exercises": filtered[offset : offset + limit],
+    }
+    if facets:
+        # Facet counts are computed over the text-query set only, so toggling a
+        # chip doesn't make the other chip counts jump around.
+        text_only = apply_filters(all_exercises, ExerciseQuery(q=q))
+        body["facets"] = compute_facets(text_only)
+    return body
 
 
 @router.get("/{exercise_id}")
