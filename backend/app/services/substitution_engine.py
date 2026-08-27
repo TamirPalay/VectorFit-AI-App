@@ -40,13 +40,18 @@ class SubstitutionEngine:
         user_id: int,
         exercise_id: str,
         top_k: int = 5,
-        candidate_pool: int = 20,
+        candidate_pool: int = 60,
     ) -> list[Substitute]:
         """
         Return up to top_k eligible substitutes for exercise_id, ranked by
         similarity × preference_score.
 
         candidate_pool: how many FAISS neighbours to evaluate before filtering.
+        60 (not 20) because a user with a blanket force_direction restriction
+        (e.g. against_gravity) can block most of an exercise's nearest
+        neighbours outright — a narrow pool then finds nothing even when a
+        perfectly good supported alternative exists further down the ranking.
+        The dataset is small (~300 exercises) so a wider pool costs nothing.
         Raise ValueError if exercise_id is not in the index.
         """
         all_exercises = {ex["id"]: ex for ex in self._index.exercises}

@@ -71,8 +71,12 @@ class WorkoutExercise(Base):
     feedback: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # "liked" | "disliked" | "rejected" | None
 
-    # If this was a substitution, record what it replaced
+    # If this was a substitution, record what it replaced and why (for the
+    # "what got swapped out" tooltip) — generated once at program creation,
+    # not regenerated on every fetch.
     substituted_for_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    substituted_for_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    substitution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     log: Mapped["WorkoutLog"] = relationship("WorkoutLog", back_populates="exercises")
 

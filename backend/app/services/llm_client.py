@@ -19,11 +19,22 @@ Usage:
     text = response.choices[0].message.content
 """
 
+import asyncio
+
 from openai import AsyncOpenAI
 from google import genai
 from google.genai import types as genai_types
 
 from app.config import settings
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """True for a 429 / quota-exhausted response from any provider."""
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    if status == 429:
+        return True
+    text = str(exc).lower()
+    return "429" in text or "resource_exhausted" in text or "rate limit" in text
 
 
 class _Message:
@@ -124,25 +135,12 @@ async def _gemini_chat(
     return _ChatCompletion(text)
 
 
-async def llm_chat(
+async def _llm_chat_once(
     messages: list[dict],
-    temperature: float = 0.7,
-    max_tokens: int = 1024,
-    response_format: dict | None = None,
+    temperature: float,
+    max_tokens: int,
+    response_format: dict | None,
 ) -> object:
-    """
-    Send a chat-completion request to whichever provider is configured.
-
-    Args:
-        messages: OpenAI-format message list, e.g. [{"role": "user", "content": "..."}]
-        temperature: Sampling temperature (0 = deterministic, 1 = creative).
-        max_tokens: Maximum tokens in the completion.
-        response_format: Optional dict, e.g. {"type": "json_object"} for structured output.
-
-    Returns:
-        An object shaped like an OpenAI ChatCompletion.
-        Access the text with: response.choices[0].message.content
-    """
     provider = settings.llm_provider.lower()
 
     if provider == "gemini":
@@ -159,3 +157,39 @@ async def llm_chat(
         kwargs["response_format"] = response_format
 
     return await client.chat.completions.create(**kwargs)
+
+
+async def llm_chat(
+    messages: list[dict],
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+    response_format: dict | None = None,
+    max_retries: int = 2,
+    retry_base_delay: float = 3.0,
+) -> object:
+    """
+    Send a chat-completion request to whichever provider is configured.
+
+    Args:
+        messages: OpenAI-format message list, e.g. [{"role": "user", "content": "..."}]
+        temperature: Sampling temperature (0 = deterministic, 1 = creative).
+        max_tokens: Maximum tokens in the completion.
+        response_format: Optional dict, e.g. {"type": "json_object"} for structured output.
+        max_retries: Extra attempts on a 429 / quota error (exponential backoff).
+        retry_base_delay: Seconds before the first retry; doubles each attempt.
+
+    Returns:
+        An object shaped like an OpenAI ChatCompletion.
+        Access the text with: response.choices[0].message.content
+
+    Raises the provider error if every attempt fails — callers narrate a
+    static fallback in that case rather than surfacing an empty response.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return await _llm_chat_once(messages, temperature, max_tokens, response_format)
+        except Exception as exc:
+            if attempt < max_retries and _is_rate_limit_error(exc):
+                await asyncio.sleep(retry_base_delay * (2 ** attempt))
+                continue
+            raise
