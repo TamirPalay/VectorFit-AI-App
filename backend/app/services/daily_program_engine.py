@@ -18,7 +18,6 @@ decide what's safe or what to train, consistent with Stages 4-6.
 
 from __future__ import annotations
 
-import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -29,7 +28,7 @@ from app.ml.embeddings import ExerciseIndex, cosine_similarity
 from app.models.rejection import RejectionEvent
 from app.models.user import User
 from app.models.workout_log import WorkoutExercise, WorkoutLog
-from app.services.explanation_service import explain_substitution
+from app.services.explanation_service import explain_substitutions_batch
 from app.services.suggestibility_engine import (
     SuggestibilityEngine,
     SuggestibilityState,
@@ -97,6 +96,10 @@ class DailyProgramEngine:
         self._index = index
         self._suggestibility = SuggestibilityEngine(db)
         self._substitution = SubstitutionEngine(db=db, index=index)
+        # (original_id, substitute_id) -> narration. Reused across days within a
+        # single generate_week() call so an identical swap is narrated once, not
+        # once per day. Seeded from previously-persisted notes on first lookup.
+        self._note_cache: dict[tuple[str, str], str] = {}
 
     # ── History reads ────────────────────────────────────────────────────
 
@@ -163,6 +166,32 @@ class DailyProgramEngine:
             fit[type_name] = max(0.1, sum(pattern_fits) / len(pattern_fits)) if pattern_fits else 0.1
         return fit
 
+    def _pattern_viability(self, user: User) -> dict[str, float]:
+        """Fraction of this user's equipment-fit exercises in each movement
+        pattern that survive suggestibility (i.e. aren't SUPPRESSED/COOLDOWN).
+        Lets type scoring avoid scheduling, say, a legs day for someone whose
+        injury blocks nearly every squat/hinge — the generator would otherwise
+        swap out the entire session. Computed once per generation."""
+        equipment = set(user.equipment) | {"bodyweight"}
+        by_pattern: dict[str, list[dict]] = defaultdict(list)
+        for ex in self._index.all_exercises():
+            if set(ex.get("equipment_required", [])) <= equipment:
+                by_pattern[ex["movement_pattern"]].append(ex)
+
+        viability: dict[str, float] = {}
+        for pattern, exs in by_pattern.items():
+            sample = sorted(exs, key=lambda e: -self._activation_magnitude(e))[:15]
+            if not sample:
+                viability[pattern] = 0.0
+                continue
+            results = self._suggestibility.batch_compute(user.id, sample)
+            blocked = sum(
+                1 for r in results
+                if r.state in (SuggestibilityState.SUPPRESSED, SuggestibilityState.COOLDOWN)
+            )
+            viability[pattern] = 1 - blocked / len(sample)
+        return viability
+
     def _last_workout_type(self, user_id: int, before: date) -> str | None:
         today_dt = datetime.combine(before, datetime.min.time(), tzinfo=timezone.utc)
         log = (
@@ -208,6 +237,7 @@ class DailyProgramEngine:
         recent_volume: dict[str, float],
         pattern_pref: dict[str, float],
         equip_fit: dict[str, float],
+        pattern_viability: dict[str, float],
         prev_type: str | None,
         used_this_week: dict[str, int],
     ) -> float:
@@ -215,6 +245,11 @@ class DailyProgramEngine:
 
         score = self._goal_affinity(user.goals, type_name)
         score *= equip_fit.get(type_name, 0.5)
+
+        # Steer away from types the user's injuries would gut (min across the
+        # type's patterns — one fully-blocked pattern sinks the whole type).
+        viability = min((pattern_viability.get(p, 1.0) for p in patterns), default=1.0)
+        score *= 0.1 + 0.9 * viability
 
         recency_load = sum(recent_volume.get(p, 0.0) for p in patterns)
         score *= max(0.15, 1 - 0.15 * recency_load)
@@ -234,11 +269,14 @@ class DailyProgramEngine:
         recent_volume: dict[str, float],
         pattern_pref: dict[str, float],
         equip_fit: dict[str, float],
+        pattern_viability: dict[str, float],
         prev_type: str | None,
         used_this_week: dict[str, int],
     ) -> str:
         scored = {
-            t: self._score_type(t, user, recent_volume, pattern_pref, equip_fit, prev_type, used_this_week)
+            t: self._score_type(
+                t, user, recent_volume, pattern_pref, equip_fit, pattern_viability, prev_type, used_this_week
+            )
             for t in WORKOUT_TYPES
         }
         return max(scored, key=scored.get)
@@ -254,6 +292,7 @@ class DailyProgramEngine:
             recent_volume=self._recent_pattern_volume(user.id, target_date),
             pattern_pref=self._pattern_preference_avg(user.id),
             equip_fit=self._equipment_fit(user),
+            pattern_viability=self._pattern_viability(user),
             prev_type=self._last_workout_type(user.id, target_date),
             used_this_week={},
         )
@@ -272,6 +311,7 @@ class DailyProgramEngine:
         recent_volume = self._recent_pattern_volume(user.id, start_date)
         pattern_pref = self._pattern_preference_avg(user.id)
         equip_fit = self._equipment_fit(user)
+        pattern_viability = self._pattern_viability(user)
 
         plan: list[str | None] = []
         used_this_week: dict[str, int] = defaultdict(int)
@@ -283,7 +323,9 @@ class DailyProgramEngine:
                 prev_type = None  # a rest day resets the "avoid repeating yesterday" penalty
                 continue
 
-            chosen = self._choose_type(user, recent_volume, pattern_pref, equip_fit, prev_type, used_this_week)
+            chosen = self._choose_type(
+                user, recent_volume, pattern_pref, equip_fit, pattern_viability, prev_type, used_this_week
+            )
             plan.append(chosen)
             used_this_week[chosen] += 1
             prev_type = chosen
@@ -346,6 +388,43 @@ class DailyProgramEngine:
 
     # ── Suggestibility filter + substitution/tooltip pass ───────────────
 
+    def _cached_note(self, original_id: str, substitute_id: str) -> str | None:
+        """Return an existing narration for this exact swap pair — from this
+        generation's in-memory cache first, then any previously-persisted
+        WorkoutExercise. Avoids re-calling the LLM for a swap we've already
+        explained (common across the days of a week)."""
+        key = (original_id, substitute_id)
+        if key in self._note_cache:
+            return self._note_cache[key]
+        row = (
+            self._db.query(WorkoutExercise)
+            .filter(
+                WorkoutExercise.substituted_for_id == original_id,
+                WorkoutExercise.exercise_id == substitute_id,
+                WorkoutExercise.substitution_note.isnot(None),
+            )
+            .first()
+        )
+        note = row.substitution_note if row else None
+        if note:
+            self._note_cache[key] = note
+        return note
+
+    def _pick_substitute(self, user_id: int, ex: dict, used_ids: set[str], picked_vectors: list):
+        """Best safe substitute for `ex`: prefer one in the same movement
+        pattern, skip anything already used in the day or near-identical
+        (cosine > 0.93) to an exercise already in the plan."""
+        subs = self._substitution.find_substitutes(user_id, ex["id"], top_k=8)
+        same_pattern = [s for s in subs if s.exercise.get("movement_pattern") == ex.get("movement_pattern")]
+        for cand in (same_pattern + [s for s in subs if s not in same_pattern]):
+            if cand.exercise["id"] in used_ids:
+                continue
+            cvec = self._index.get_vector(cand.exercise["id"])
+            if any(cosine_similarity(cvec, pv) > _NEAR_DUPLICATE_SIMILARITY for pv in picked_vectors):
+                continue
+            return cand
+        return None
+
     async def _build_slots(self, user_id: int, generic: list[dict]) -> tuple[list[ExerciseSlot], list[str]]:
         sg_results = self._suggestibility.batch_compute(user_id, generic)
 
@@ -353,6 +432,7 @@ class DailyProgramEngine:
         blocked: list[tuple[int, dict, object]] = []
         warnings: list[str] = []
         used_ids: set[str] = set()
+        picked_vectors: list = []
 
         for position, (ex, sg) in enumerate(zip(generic, sg_results)):
             if sg.state in (SuggestibilityState.SUPPRESSED, SuggestibilityState.COOLDOWN):
@@ -360,24 +440,40 @@ class DailyProgramEngine:
             else:
                 ok_slots.append((position, ExerciseSlot(exercise=ex)))
                 used_ids.add(ex["id"])
+                picked_vectors.append(self._index.get_vector(ex["id"]))
 
-        # Resolved sequentially (each pick affects what the next one may reuse)
-        # before the LLM explanations run, which are still gathered concurrently.
-        swap_meta = []
-        swap_tasks = []
+        # Resolve substitutes sequentially (each pick constrains the next), then
+        # narrate every swap that still needs it in ONE batched LLM call.
+        swaps: list[tuple[int, dict, object, object]] = []
         for position, ex, sg in blocked:
-            subs = self._substitution.find_substitutes(user_id, ex["id"], top_k=5)
-            sub = next((s for s in subs if s.exercise["id"] not in used_ids), None)
+            sub = self._pick_substitute(user_id, ex, used_ids, picked_vectors)
             if sub is None:
                 warnings.append(f"No safe substitute found for {ex['name']} — dropped from the plan.")
                 continue
             used_ids.add(sub.exercise["id"])
-            swap_meta.append((position, ex, sub))
-            swap_tasks.append(explain_substitution(ex, sub, sg))
+            picked_vectors.append(self._index.get_vector(sub.exercise["id"]))
+            swaps.append((position, ex, sub, sg))
 
-        notes = await asyncio.gather(*swap_tasks) if swap_tasks else []
-        for (position, ex, sub), note in zip(swap_meta, notes):
-            ok_slots.append((position, ExerciseSlot(exercise=sub.exercise, substituted_for=ex, substitution_note=note)))
+        notes_by_pos: dict[int, str] = {}
+        to_narrate: list[tuple[int, dict, object, object]] = []
+        for position, ex, sub, sg in swaps:
+            cached = self._cached_note(ex["id"], sub.exercise["id"])
+            if cached:
+                notes_by_pos[position] = cached
+            else:
+                to_narrate.append((position, ex, sub, sg))
+
+        if to_narrate:
+            batch = [{"original": ex, "substitute": sub, "sg_result": sg} for _, ex, sub, sg in to_narrate]
+            batch_notes = await explain_substitutions_batch(batch)
+            for (position, ex, sub, _sg), note in zip(to_narrate, batch_notes):
+                notes_by_pos[position] = note
+                self._note_cache[(ex["id"], sub.exercise["id"])] = note
+
+        for position, ex, sub, _sg in swaps:
+            ok_slots.append((position, ExerciseSlot(
+                exercise=sub.exercise, substituted_for=ex, substitution_note=notes_by_pos.get(position),
+            )))
 
         ok_slots.sort(key=lambda pair: pair[0])
         return [slot for _, slot in ok_slots], warnings

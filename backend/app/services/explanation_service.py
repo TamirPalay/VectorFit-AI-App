@@ -9,6 +9,8 @@ the LLM only writes the text.
 
 from __future__ import annotations
 
+import json
+
 from app.services.llm_client import llm_chat
 from app.services.substitution_engine import Substitute
 from app.services.suggestibility_engine import SuggestibilityResult, SuggestibilityState
@@ -128,6 +130,28 @@ def _build_user_message(
     return "\n".join(lines)
 
 
+def _fallback_note(
+    original: dict,
+    substitute: Substitute,
+    complements: list[dict] | None = None,
+) -> str:
+    """Factual, LLM-free explanation — used when the model errors or is rate-limited."""
+    if complements:
+        gap_pct = 100 - int(substitute.coverage * 100)
+        names = ", ".join(c["exercise"]["name"] for c in complements[:3])
+        coverage_note = f" To cover the remaining {gap_pct}%, pair it with one of: {names}."
+    elif substitute.coverage < 0.85:
+        coverage_note = f" Consider adding a complementary exercise to cover the remaining {100 - int(substitute.coverage * 100)}%."
+    else:
+        coverage_note = ""
+    return (
+        f"{original['name']} has been swapped for {substitute.exercise['name']} "
+        f"({int(substitute.similarity * 100)}% muscle match, "
+        f"{int(substitute.coverage * 100)}% activation coverage).{coverage_note} "
+        f"Stop immediately if you feel any pain or discomfort."
+    )
+
+
 async def explain_substitution(
     original: dict,
     substitute: Substitute,
@@ -150,20 +174,79 @@ async def explain_substitution(
         response = await llm_chat(messages=messages, temperature=0.5, max_tokens=700)
         return response.choices[0].message.content.strip()
     except Exception:
-        if complements:
-            gap_pct = 100 - int(substitute.coverage * 100)
-            names = ", ".join(c["exercise"]["name"] for c in complements[:3])
-            coverage_note = f" To cover the remaining {gap_pct}%, pair it with one of: {names}."
-        elif substitute.coverage < 0.85:
-            coverage_note = f" Consider adding a complementary exercise to cover the remaining {100 - int(substitute.coverage * 100)}%."
-        else:
-            coverage_note = ""
-        return (
-            f"{original['name']} has been swapped for {substitute.exercise['name']} "
-            f"({int(substitute.similarity * 100)}% muscle match, "
-            f"{int(substitute.coverage * 100)}% activation coverage).{coverage_note} "
-            f"Stop immediately if you feel any pain or discomfort."
+        return _fallback_note(original, substitute, complements)
+
+
+_BATCH_SYSTEM_PROMPT = _SYSTEM_PROMPT + """
+
+You will be given SEVERAL numbered swaps at once (SWAP 1, SWAP 2, ...). Write one \
+explanation for each, following all the rules above for every one. Respond with a \
+single JSON object of the form {"explanations": [{"n": 1, "text": "..."}, {"n": 2, \
+"text": "..."}, ...]} — one entry per swap, in order, "n" matching the swap number. \
+No prose outside the JSON.\
+"""
+
+
+async def explain_substitutions_batch(
+    swaps: list[dict],
+) -> list[str]:
+    """
+    Narrate a whole day's worth of swaps in ONE LLM call.
+
+    swaps: [{"original": dict, "substitute": Substitute,
+             "sg_result": SuggestibilityResult, "complements": list|None}, ...]
+
+    Returns a list of note strings aligned to `swaps`. Any swap the model
+    doesn't return text for (or if the whole call fails / can't be parsed)
+    falls back to `_fallback_note` for that item — never an empty string.
+    """
+    if not swaps:
+        return []
+
+    fallbacks = [
+        _fallback_note(s["original"], s["substitute"], s.get("complements"))
+        for s in swaps
+    ]
+    if len(swaps) == 1:
+        s = swaps[0]
+        return [await explain_substitution(
+            s["original"], s["substitute"], s["sg_result"], s.get("complements")
+        )]
+
+    blocks = []
+    for i, s in enumerate(swaps, start=1):
+        body = _build_user_message(
+            s["original"], s["substitute"], s["sg_result"], s.get("complements")
         )
+        blocks.append(f"SWAP {i}:\n{body}")
+    user_message = "\n\n".join(blocks)
+
+    messages = [
+        {"role": "system", "content": _BATCH_SYSTEM_PROMPT},
+        *_FEW_SHOT,
+        {"role": "user", "content": user_message},
+    ]
+
+    try:
+        response = await llm_chat(
+            messages=messages,
+            temperature=0.5,
+            max_tokens=400 + 320 * len(swaps),
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content.strip()
+        parsed = json.loads(raw)
+        entries = parsed["explanations"] if isinstance(parsed, dict) else parsed
+        by_n: dict[int, str] = {}
+        for idx, entry in enumerate(entries, start=1):
+            if isinstance(entry, str):
+                by_n[idx] = entry.strip()
+            else:
+                n = int(entry.get("n", idx))
+                by_n[n] = str(entry.get("text", "")).strip()
+        return [by_n.get(i + 1) or fallbacks[i] for i in range(len(swaps))]
+    except Exception:
+        return fallbacks
 
 
 async def explain_substitution_set(

@@ -113,6 +113,19 @@ async def generate_weekly_program(
             if existing:
                 db.delete(existing)
         db.commit()
+    else:
+        # Already generated for this rolling window? Return it as-is — don't
+        # re-run the engine (and its LLM calls) just to rebuild the same week.
+        # A day with no log is a rest day (same convention as GET /weekly-program).
+        existing_logs = {i: _find_log(db, user_id, today + timedelta(days=i)) for i in range(7)}
+        if any(existing_logs.values()):
+            return WeekProgramOut(days=[
+                DayProgramOut(
+                    day_index=i, date=today + timedelta(days=i),
+                    is_rest=log is None, workout=_to_out(log) if log else None,
+                )
+                for i, log in existing_logs.items()
+            ])
 
     engine = DailyProgramEngine(db=db, index=request.app.state.exercise_index)
     day_plans = await engine.generate_week(user, today)
