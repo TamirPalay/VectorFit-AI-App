@@ -364,11 +364,61 @@ Try these in /docs (replace {user.id} with the user id above):
 """)
 
 
+def seed_custom_workout(db) -> None:
+    """One custom-builder template for Morgan — a starting point for Stage 8
+    endpoint testing (edit exercises, reorder, analyse, start, complete)."""
+    from app.models.workout_log import WorkoutExercise, WorkoutLog
+
+    morgan = db.query(_u.User).filter(_u.User.email == "morgan@demo.vectorfit").first()
+    if not morgan:
+        return
+    if db.query(WorkoutLog).filter(WorkoutLog.user_id == morgan.id, WorkoutLog.source == "custom_builder").first():
+        print("Custom workout already exists for Morgan — skipping.")
+        return
+
+    tmpl = WorkoutLog(
+        user_id=morgan.id,
+        name="Morgan's Full Body A",
+        workout_type="full_body",
+        source="custom_builder",
+        is_template=True,
+        notes="Twice a week, alternate with Full Body B.",
+        started_at=_ago(days=1),
+    )
+    picks = [
+        ("goblet_squat", 3, "8-12", None, "Dumbbell at chest, sit between the heels."),
+        ("dumbbell_bench_press", 3, "8-12", None, None),
+        ("dumbbell_row", 3, "10-12", None, "Each side."),
+        ("romanian_deadlift_dumbbell", 3, "10-12", None, "Soft knees, hinge from the hips."),
+        ("plank", 3, None, 45, "Hold, ribs down."),
+    ]
+    for pos, (ex_id, sets, reps, dur, note) in enumerate(picks):
+        tmpl.exercises.append(WorkoutExercise(
+            exercise_id=ex_id, exercise_name=ex_id.replace("_", " ").title(),
+            position=pos, sets=sets, reps=reps, duration_seconds=dur,
+            rest_seconds=60, notes=note,
+        ))
+    db.add(tmpl)
+    db.commit()
+    print(f"""
+Seeded custom workout template
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Workout:  "Morgan's Full Body A"  (template, user id={morgan.id})
+Try:
+  GET  /users/{morgan.id}/workouts
+  GET  /users/{morgan.id}/workouts/{{wid}}/suggestions?body_part=back&facets=true
+  GET  /users/{morgan.id}/workouts/{{wid}}/analysis
+  POST /users/{morgan.id}/workouts/{{wid}}/start
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+""")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
         seed_tamir(db)
         seed_control_user(db)
         seed_leg_injury_user(db)
+        seed_custom_workout(db)
     finally:
         db.close()

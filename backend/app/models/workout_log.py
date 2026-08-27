@@ -9,7 +9,7 @@ Rejection events live in rejection.py and reference exercises directly.
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,11 +25,19 @@ class WorkoutLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
 
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # User-given title for custom-builder workouts, e.g. "Push Day A". Null for
+    # auto-generated daily programs.
+
     workout_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # e.g. "push", "pull", "legs", "full_body", "custom"
 
     source: Mapped[str] = mapped_column(String(20), default="daily")
     # "daily" | "custom_builder" | "demo"
+
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True = a reusable blueprint the user edits in the builder. Starting a
+    # template clones it into a fresh non-template log with started_at=now.
 
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -61,11 +69,19 @@ class WorkoutExercise(Base):
     # Order within the workout
 
     sets: Mapped[int] = mapped_column(Integer, default=3)
-    reps: Mapped[str] = mapped_column(String(20), default="10")
-    # Stored as string to support ranges like "8-12" or "AMRAP"
+    reps: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Stored as string to support ranges like "8-12" or "AMRAP". Null for a
+    # purely time-based exercise (use duration_seconds instead).
+
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # For time-based work (planks, carries, cardio intervals). An exercise may
+    # set reps, duration_seconds, or both.
 
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     rest_seconds: Mapped[int] = mapped_column(Integer, default=60)
+
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Per-exercise coaching cue, e.g. "pause 2s at the bottom", "last set to failure".
 
     # Whether the user liked this exercise during the session
     feedback: Mapped[str | None] = mapped_column(String(20), nullable=True)

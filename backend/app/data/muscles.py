@@ -68,6 +68,52 @@ MUSCLE_DISPLAY: dict[str, dict] = {
     "calves":            {"display_name": "Calves",             "side": "back"},
 }
 
+# ── Body-part groups (for the custom-builder quick filters) ───────────────────
+# Maps a coarse "body part" chip to the fine-grained muscles it covers. An
+# exercise matches a body part if ANY of these muscles is activated at or above
+# BODY_PART_MATCH_THRESHOLD. The bar is deliberately high (0.5 = "strong secondary"
+# or above) so a chip means "this exercise trains that area", not "uses it as a
+# stabilizer". Umbrella groups (arms, legs) expand to the union of their sub-groups.
+BODY_PART_MATCH_THRESHOLD = 0.5
+
+BODY_PARTS: dict[str, set[str]] = {
+    "chest":       {"chest", "serratus_anterior"},
+    "back":        {"lats", "rhomboids", "traps_upper", "traps_mid", "erector_spinae"},
+    "lower_back":  {"erector_spinae"},
+    "shoulders":   {"anterior_deltoid", "lateral_deltoid", "posterior_deltoid"},
+    "biceps":      {"biceps"},
+    "triceps":     {"triceps"},
+    "forearms":    {"forearms"},
+    "core":        {"abs", "obliques"},
+    "quads":       {"quads"},
+    "hamstrings":  {"hamstrings"},
+    "glutes":      {"glutes"},
+    "hip_flexors": {"hip_flexors"},
+    "adductors":   {"adductors"},
+    "abductors":   {"abductors"},
+    "calves":      {"calves"},
+}
+
+_BODY_PART_UMBRELLAS: dict[str, tuple[str, ...]] = {
+    "arms": ("biceps", "triceps", "forearms"),
+    "legs": ("quads", "hamstrings", "glutes", "calves", "adductors", "abductors", "hip_flexors"),
+}
+
+BODY_PART_NAMES: list[str] = list(BODY_PARTS) + list(_BODY_PART_UMBRELLAS)
+
+
+def muscles_for_body_part(name: str) -> set[str]:
+    """Resolve a body-part chip (incl. umbrellas) to its set of muscle ids.
+    Unknown names return an empty set."""
+    key = name.strip().lower()
+    if key in _BODY_PART_UMBRELLAS:
+        out: set[str] = set()
+        for sub in _BODY_PART_UMBRELLAS[key]:
+            out |= BODY_PARTS.get(sub, set())
+        return out
+    return set(BODY_PARTS.get(key, set()))
+
+
 # ── Joint-stress flag vocabulary ──────────────────────────────────────────────
 # Used to filter exercises against a user's active injury restrictions.
 # An exercise's joint_stress_flags list contains zero or more of these strings.

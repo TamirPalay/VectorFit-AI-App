@@ -13,8 +13,12 @@ class WorkoutExerciseOut(BaseModel):
     exercise_name: str
     position: int
     sets: int
-    reps: str
+    reps: str | None = None
+    duration_seconds: int | None = None
+    weight_kg: float | None = None
     rest_seconds: int
+    notes: str | None = None
+    feedback: str | None = None
     substituted_for_id: str | None = None
     substituted_for_name: str | None = None
     substitution_note: str | None = None
@@ -25,11 +29,14 @@ class WorkoutExerciseOut(BaseModel):
 class WorkoutLogOut(BaseModel):
     id: int
     user_id: int
+    name: str | None = None
     workout_type: str | None
     workout_label: str | None = None
     source: str
+    is_template: bool = False
     started_at: datetime
     completed_at: datetime | None
+    notes: str | None = None
     exercises: list[WorkoutExerciseOut]
 
     model_config = {"from_attributes": True}
