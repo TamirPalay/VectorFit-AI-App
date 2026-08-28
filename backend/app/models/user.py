@@ -49,6 +49,10 @@ class User(Base):
     days_per_week: Mapped[int] = mapped_column(Integer, default=3)
     minutes_per_session: Mapped[int] = mapped_column(Integer, default=45)
 
+    # Dashboard: whether to surface the personal-records (max weight per exercise)
+    # panel. Off for users who don't train for load — bodyweight, mobility, etc.
+    show_personal_records: Mapped[bool] = mapped_column(Boolean, default=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 

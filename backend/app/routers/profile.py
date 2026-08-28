@@ -70,6 +70,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserOut:
         experience_level=payload.experience_level,
         days_per_week=payload.days_per_week,
         minutes_per_session=payload.minutes_per_session,
+        show_personal_records=payload.show_personal_records,
     )
     user.goals = payload.goals
     user.equipment = payload.equipment

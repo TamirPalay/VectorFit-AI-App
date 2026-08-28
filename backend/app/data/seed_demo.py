@@ -21,6 +21,7 @@ from app.database import SessionLocal, engine
 from app.models import user as _u
 from app.models.rejection import RejectionEvent
 import app.models.workout_log  # noqa — register all models
+import app.models.daily_metric  # noqa — register all models
 from app.database import Base as AppBase
 
 AppBase.metadata.create_all(bind=engine)
@@ -413,6 +414,160 @@ Try:
 """)
 
 
+def seed_history(db) -> None:
+    """~8 weeks of completed workouts + daily health metrics for all three demo
+    users, so the Stage 9 dashboard has something to chart. Distinct shapes:
+      • Tamir  — steady 3x/week, trains around the shoulder (pull / full body / core)
+      • Morgan — ramps up: 1–2x/week early, 3x/week recently
+      • Jordan — 4x/week, a volume dip in the week around his injury, then recovery
+    """
+    import random
+    from app.models.daily_metric import DailyMetric
+    from app.models.workout_log import WorkoutExercise, WorkoutLog
+
+    rng = random.Random(42)
+    dataset = json.load(open(Path(__file__).parent / "exercises.json", encoding="utf-8"))["exercises"]
+    by_pattern: dict[str, list[dict]] = {}
+    for ex in dataset:
+        by_pattern.setdefault(ex["movement_pattern"], []).append(ex)
+
+    _TYPE_PATTERNS = {
+        "push": ["push"], "pull": ["pull"], "legs": ["squat", "hinge"],
+        "upper": ["push", "pull"], "full_body": ["push", "pull", "squat", "hinge"],
+        "core_and_carry": ["core", "carry"],
+    }
+    _WEIGHTED_EQUIP = {"barbell", "dumbbells", "kettlebell", "cables", "machines"}
+
+    ex_base_weight: dict[tuple[int, str], float] = {}
+
+    def pick_exercises(user_id: int, wtype: str, equipment: set[str], n: int, week: int) -> list[dict]:
+        equip = equipment | {"bodyweight"}
+        pool: list[dict] = []
+        for pat in _TYPE_PATTERNS[wtype]:
+            cands = [e for e in by_pattern.get(pat, []) if set(e.get("equipment_required", [])) <= equip]
+            cands.sort(key=lambda e: -sum(e["muscle_activation"].values()))
+            pool.extend(cands[:8])
+        rng.shuffle(pool)
+        out = []
+        for e in pool[:n]:
+            weighted = bool(set(e.get("equipment_required", [])) & _WEIGHTED_EQUIP)
+            weight = None
+            if weighted:
+                key = (user_id, e["id"])
+                base = ex_base_weight.setdefault(key, rng.choice([15, 20, 25, 30, 40, 50, 60]))
+                # steady linear progression + a little session-to-session noise
+                weight = round(base * (1 + 0.01 * week) + rng.uniform(-1.5, 1.5), 1)
+            out.append({"ex": e, "weight": weight})
+        return out
+
+    # Exercises the injury engine would have swapped out, per user — used to
+    # populate a few realistic substitutions so the dashboard's "safety engine
+    # at work" panel has data.
+    _SWAPPED_OUT = {
+        "Tamir":  [("overhead_press", "Overhead Press (Military Press)"),
+                   ("push_up", "Push-up"), ("pull_up", "Pull-up")],
+        "Jordan": [("barbell_back_squat", "Barbell Back Squat"),
+                   ("lunge", "Lunge"), ("leg_extension_machine", "Leg Extension Machine")],
+    }
+
+    def make_workout(user, d, wtype, week):
+        equipment = set(user.equipment)
+        picks = pick_exercises(user.id, wtype, equipment, rng.randint(4, 6), week)
+        started = datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc).replace(hour=18)
+        log = WorkoutLog(
+            user_id=user.id, name=None, workout_type=wtype, source="daily",
+            is_template=False, started_at=started,
+            completed_at=started + timedelta(minutes=rng.randint(38, 62)),
+        )
+        swaps = _SWAPPED_OUT.get(user.name, [])
+        swap_here = swaps and rng.random() < 0.3
+        for pos, p in enumerate(picks):
+            sub_for_id = sub_for_name = None
+            if swap_here and pos == 0:
+                sub_for_id, sub_for_name = rng.choice(swaps)
+            log.exercises.append(WorkoutExercise(
+                exercise_id=p["ex"]["id"], exercise_name=p["ex"]["name"], position=pos,
+                sets=rng.randint(3, 4), reps=rng.choice(["6-8", "8-10", "8-12", "10-12"]),
+                rest_seconds=rng.choice([60, 75, 90]), weight_kg=p["weight"],
+                feedback=rng.choice([None, None, None, "liked"]),
+                substituted_for_id=sub_for_id, substituted_for_name=sub_for_name,
+                substitution_note=(f"{sub_for_name} was swapped out for a safer alternative."
+                                   if sub_for_name else None),
+            ))
+        db.add(log)
+
+    users = {u.name: u for u in db.query(_u.User).all()}
+    if db.query(WorkoutLog).filter(WorkoutLog.source == "daily").first():
+        print("Workout history already seeded — skipping.")
+        return
+
+    NWEEKS = 13
+    plans = {
+        # per_week takes weeks_ago (0 = current week)
+        "Tamir":  (["pull", "full_body", "core_and_carry"], lambda ago: 3),
+        "Morgan": (["full_body", "upper", "legs"], lambda ago: 1 if ago > 9 else (2 if ago > 5 else 3)),
+        "Jordan": (["legs", "push", "pull", "upper"], lambda ago: 2 if ago == 1 else 4),
+    }
+
+    for name, (rotation, per_week) in plans.items():
+        user = users.get(name)
+        if not user:
+            continue
+        rot_i = 0
+        for week in range(NWEEKS):  # 0 = oldest, NWEEKS-1 = current week
+            weeks_ago = NWEEKS - 1 - week
+            train_days = rng.sample(range(7), k=min(per_week(weeks_ago), 7))
+            for dow in sorted(train_days):
+                days_ago = weeks_ago * 7 + (6 - dow)
+                if days_ago < 0:
+                    continue
+                d = (NOW - timedelta(days=days_ago)).date()
+                make_workout(user, d, rotation[rot_i % len(rotation)], week)
+                rot_i += 1
+
+    # ── Daily health metrics — last 95 days ─────────────────────────────────
+    weight_base = {"Tamir": 78.0, "Morgan": 70.0, "Jordan": 68.0}
+    for name, user in users.items():
+        if name not in weight_base:
+            continue
+        w = weight_base[name]
+        for days_ago in range(95, -1, -1):
+            d = (NOW - timedelta(days=days_ago)).date()
+            weekday = d.weekday()
+            steps = int(rng.gauss(8500 if weekday < 5 else 6500, 1800))
+            steps = max(1500, steps)
+            trained = db.query(WorkoutLog).filter(
+                WorkoutLog.user_id == user.id, WorkoutLog.source == "daily",
+                WorkoutLog.started_at >= datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc),
+                WorkoutLog.started_at < datetime.combine(d + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc),
+            ).first() is not None
+            w += rng.gauss(-0.02 if name != "Morgan" else -0.05, 0.15)  # slight downward drift
+            db.add(DailyMetric(
+                user_id=user.id, date=d,
+                steps=steps,
+                active_calories=int(steps * 0.035 + (rng.randint(180, 320) if trained else 0)),
+                resting_heart_rate=int(rng.gauss(58, 3)),
+                body_weight_kg=round(w, 1),
+                sleep_hours=round(max(4.5, min(9.0, rng.gauss(7.1, 0.8))), 1),
+                energy_level=rng.choice([2, 3, 3, 4, 4, 5]),
+            ))
+
+    db.commit()
+    n_logs = db.query(WorkoutLog).filter(WorkoutLog.source == "daily").count()
+    print(f"""
+Seeded workout history + health metrics
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{n_logs} completed workouts across Tamir / Morgan / Jordan, ~13 weeks back.
+96 days of daily metrics (steps, calories, weight, sleep, RHR, energy) each.
+Try:
+  GET /users/1/dashboard/summary
+  GET /users/1/dashboard/muscle-activation?bucket=week&group=body_part&format=png
+  GET /users/3/dashboard/workouts?format=png
+  GET /users/1/dashboard/metrics?metric=steps&format=png
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+""")
+
+
 if __name__ == "__main__":
     db = SessionLocal()
     try:
@@ -420,5 +575,6 @@ if __name__ == "__main__":
         seed_control_user(db)
         seed_leg_injury_user(db)
         seed_custom_workout(db)
+        seed_history(db)
     finally:
         db.close()

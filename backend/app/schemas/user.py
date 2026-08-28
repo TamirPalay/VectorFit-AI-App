@@ -78,6 +78,7 @@ class UserCreate(BaseModel):
     experience_level: FitnessLevel = "beginner"
     days_per_week: int = Field(3, ge=1, le=7)
     minutes_per_session: int = Field(45, ge=10, le=300)
+    show_personal_records: bool = True
 
     @model_validator(mode="after")
     def validate_list_fields(self) -> "UserCreate":
@@ -107,6 +108,7 @@ class UserUpdate(BaseModel):
     experience_level: FitnessLevel | None = None
     days_per_week: int | None = Field(None, ge=1, le=7)
     minutes_per_session: int | None = Field(None, ge=10, le=300)
+    show_personal_records: bool | None = None
 
 
 class UserOut(BaseModel):
@@ -123,6 +125,7 @@ class UserOut(BaseModel):
     experience_level: str
     days_per_week: int
     minutes_per_session: int
+    show_personal_records: bool = True
     created_at: datetime
     updated_at: datetime
     injuries: list[InjuryOut] = []
