@@ -8,9 +8,11 @@ from app.database import Base, engine
 import app.models.user  # noqa: F401
 import app.models.workout_log  # noqa: F401
 import app.models.rejection  # noqa: F401
+import app.models.daily_metric  # noqa: F401
 
 from app.routers import (
     profile, exercises, suggestibility, substitution, explanation, daily_program, custom_workout,
+    metrics, workout_logs, dashboard,
 )
 
 app = FastAPI(
@@ -34,6 +36,9 @@ app.include_router(substitution.router)
 app.include_router(explanation.router)
 app.include_router(daily_program.router)
 app.include_router(custom_workout.router)
+app.include_router(metrics.router)
+app.include_router(workout_logs.router)
+app.include_router(dashboard.router)
 
 
 @app.on_event("startup")
