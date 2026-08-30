@@ -1,0 +1,61 @@
+.weekStrip { display: flex; gap: 10px; }
+.dayCard {
+  flex: 0 0 108px;
+  scroll-snap-align: start;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 108px;
+  transition: border-color 120ms, transform 100ms;
+}
+.dayCard.tappable { cursor: pointer; }
+.dayCard.tappable:hover { border-color: var(--border-strong); }
+.dayCard.tappable:active { transform: scale(0.98); }
+.dayCard.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dayCard.rest { background: var(--surface-2); }
+.dayCard .dow { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.dayCard .label { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; line-height: 1.1; margin-top: auto; }
+.dayCard .sub { font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono); }
+.dayCard.rest .label { color: var(--text-faint); font-weight: 600; }
+.dayCard .doneTick { color: var(--good); }
+
+.tpl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.tpl:last-child { border-bottom: none; }
+.tpl .icon {
+  width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--accent-wash); color: var(--accent);
+}
+.tpl .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tpl .meta .name { font-weight: 600; font-size: 0.95rem; }
+.tpl .meta .sub { font-size: 0.78rem; color: var(--text-dim); }
+.tpl .acts { display: flex; gap: 4px; flex-shrink: 0; }
+
+.buildCta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 120ms, background 120ms;
+}
+.buildCta:hover { border-color: var(--accent); background: var(--accent-wash); }
+.buildCta .plus {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.buildCta .t { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.buildCta .d { font-size: 0.82rem; color: var(--text-dim); }

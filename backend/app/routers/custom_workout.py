@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -47,7 +47,34 @@ router = APIRouter(prefix="/users/{user_id}/workouts", tags=["custom-workout"])
 
 _SOURCE = "custom_builder"
 _BLOCKED = (SuggestibilityState.SUPPRESSED, SuggestibilityState.COOLDOWN)
-CUSTOM_WORKOUT_TYPES = list(WORKOUT_TYPES) + ["custom"]
+
+# Focus options for the builder — a superset of the daily engine's schedulable
+# WORKOUT_TYPES. Each maps to the movement patterns that scope the suggested
+# list; body-part focuses lean on those patterns plus the picker's body-part
+# chips. label + patterns; [] patterns = "suggest from everything".
+BUILDER_FOCUS: dict[str, dict] = {
+    "full_body":      {"label": "Full Body",       "patterns": ["push", "pull", "squat", "hinge"]},
+    "upper":          {"label": "Upper Body",      "patterns": ["push", "pull"]},
+    "lower":          {"label": "Lower Body",      "patterns": ["squat", "hinge"]},
+    "push":           {"label": "Push",            "patterns": ["push"]},
+    "pull":           {"label": "Pull",            "patterns": ["pull"]},
+    "legs":           {"label": "Legs",            "patterns": ["squat", "hinge"]},
+    "chest":          {"label": "Chest",           "patterns": ["push"]},
+    "back":           {"label": "Back",            "patterns": ["pull"]},
+    "shoulders":      {"label": "Shoulders",       "patterns": ["push"]},
+    "arms":           {"label": "Arms",            "patterns": ["push", "pull"]},
+    "glutes":         {"label": "Glutes",          "patterns": ["hinge", "squat"]},
+    "core":           {"label": "Core",            "patterns": ["core"]},
+    "core_and_carry": {"label": "Core & Carry",    "patterns": ["core", "carry"]},
+    "conditioning":   {"label": "Conditioning",    "patterns": ["core", "carry"]},
+    "mobility":       {"label": "Mobility",        "patterns": ["core"]},
+    "custom":         {"label": "Custom",          "patterns": []},
+}
+CUSTOM_WORKOUT_TYPES = list(BUILDER_FOCUS)
+
+
+def _focus(workout_type: str | None) -> dict:
+    return BUILDER_FOCUS.get(workout_type or "", WORKOUT_TYPES.get(workout_type or "", {}))
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -80,7 +107,7 @@ def _get_index(request: Request):
 def _out(log: WorkoutLog) -> WorkoutLogOut:
     data = WorkoutLogOut.model_validate(log)
     if log.workout_type:
-        data.workout_label = WORKOUT_TYPES.get(log.workout_type, {}).get("label")
+        data.workout_label = _focus(log.workout_type).get("label") or log.workout_type.replace("_", " ").title()
     return data
 
 
@@ -126,6 +153,7 @@ def _injury_warning(db: Session, index, user_id: int, exercise: dict) -> str | N
 def builder_options():
     return {
         "workout_types": CUSTOM_WORKOUT_TYPES,
+        "focus_options": [{"value": k, "label": v["label"]} for k, v in BUILDER_FOCUS.items()],
         "feedback": ["liked", "disliked", "rejected"],
         "rejection_reasons": sorted(REJECTION_REASONS),
     }
@@ -235,7 +263,7 @@ def build_from_existing_log(
     src = db.query(WorkoutLog).filter(WorkoutLog.id == log_id, WorkoutLog.user_id == user_id).first()
     if not src:
         raise HTTPException(404, "Source workout log not found")
-    label = WORKOUT_TYPES.get(src.workout_type, {}).get("label", "Workout")
+    label = _focus(src.workout_type).get("label", "Workout")
     copy = WorkoutLog(
         user_id=user_id,
         name=name or f"{src.name or label} (edited)",
@@ -380,7 +408,7 @@ def suggest_exercises(
     # patterns explicitly or is running a free-text search.
     patterns = list(movement_pattern)
     if not patterns and not q:
-        patterns = WORKOUT_TYPES.get(log.workout_type, {}).get("patterns", [])
+        patterns = _focus(log.workout_type).get("patterns", [])
     patterns = [p for p in patterns if p in MOVEMENT_PATTERNS]
 
     added_ids = {we.exercise_id for we in log.exercises}
@@ -470,7 +498,7 @@ def analyze_workout(user_id: int, workout_id: int, request: Request, db: Session
     )
 
     pattern_breakdown = Counter(ex["movement_pattern"] for _, ex in resolved if ex)
-    expected = WORKOUT_TYPES.get(log.workout_type, {}).get("patterns", [])
+    expected = _focus(log.workout_type).get("patterns", [])
     missing = [p for p in expected if pattern_breakdown.get(p, 0) == 0]
 
     sg_results = SuggestibilityEngine(db).batch_compute(user_id, [ex for _, ex in resolved if ex])
@@ -495,7 +523,7 @@ def analyze_workout(user_id: int, workout_id: int, request: Request, db: Session
         warnings.append("This workout has no exercises yet.")
     if missing:
         warnings.append(
-            f"No {', '.join(missing)} work for a {WORKOUT_TYPES[log.workout_type]['label']} session."
+            f"No {', '.join(missing)} work for a {_focus(log.workout_type).get('label', 'this')} session."
         )
     if verdict == "long":
         warnings.append(f"Estimated {est_minutes} min vs your {target} min target — consider trimming a movement.")
@@ -520,11 +548,20 @@ def analyze_workout(user_id: int, workout_id: int, request: Request, db: Session
 # ── Start / complete a session ───────────────────────────────────────────────
 
 @router.post("/{workout_id}/start", response_model=WorkoutLogOut, status_code=201)
-def start_session(user_id: int, workout_id: int, db: Session = Depends(get_db)):
-    """Clone this workout (usually a template) into a fresh session log stamped
-    with started_at=now, ready to be completed."""
+def start_session(
+    user_id: int, workout_id: int,
+    on: date | None = Query(None, description="Schedule the session on this date (default: today)"),
+    db: Session = Depends(get_db),
+):
+    """Clone this workout (usually a template) into a fresh session log. With no
+    `on` date it's stamped now and ready to run; with a date it's scheduled and
+    shows up on that day of the week view."""
     _get_user_or_404(user_id, db)
     src = _get_workout_or_404(user_id, workout_id, db)
+    started = (
+        datetime.combine(on, datetime.min.time(), tzinfo=timezone.utc).replace(hour=18)
+        if on else datetime.now(timezone.utc)
+    )
     session = WorkoutLog(
         user_id=user_id,
         name=src.name,
@@ -532,7 +569,7 @@ def start_session(user_id: int, workout_id: int, db: Session = Depends(get_db)):
         source=_SOURCE,
         is_template=False,
         notes=src.notes,
-        started_at=datetime.now(timezone.utc),
+        started_at=started,
     )
     _clone_exercises(src, session)
     db.add(session)

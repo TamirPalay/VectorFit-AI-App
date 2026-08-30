@@ -108,17 +108,20 @@ async def generate_weekly_program(
     today = datetime.now(timezone.utc).date()
 
     if force:
+        # Re-plan only the days that haven't happened yet — never throw away a
+        # workout the user already completed.
         for i in range(7):
             existing = _find_log(db, user_id, today + timedelta(days=i))
-            if existing:
+            if existing and existing.completed_at is None:
                 db.delete(existing)
         db.commit()
     else:
-        # Already generated for this rolling window? Return it as-is — don't
-        # re-run the engine (and its LLM calls) just to rebuild the same week.
-        # A day with no log is a rest day (same convention as GET /weekly-program).
+        # Already planned this rolling window? Return it as-is — don't re-run
+        # the engine just to rebuild the same week. "Planned" means there's a
+        # log for a *future* day; a lone log for today (from the Today screen)
+        # doesn't count, so the first weekly generation still runs.
         existing_logs = {i: _find_log(db, user_id, today + timedelta(days=i)) for i in range(7)}
-        if any(existing_logs.values()):
+        if any(existing_logs[i] for i in range(1, 7)):
             return WeekProgramOut(days=[
                 DayProgramOut(
                     day_index=i, date=today + timedelta(days=i),
@@ -132,8 +135,13 @@ async def generate_weekly_program(
 
     out_days = []
     for day in day_plans:
-        existing = None if force else _find_log(db, user_id, day.date)
-        log = existing or engine.persist_day(user, day)
+        existing = _find_log(db, user_id, day.date)  # a completed log survived the force-delete
+        if existing is not None:
+            out_days.append(DayProgramOut(
+                day_index=day.day_index, date=day.date, is_rest=False, workout=_to_out(existing),
+            ))
+            continue
+        log = engine.persist_day(user, day)
         out_days.append(DayProgramOut(
             day_index=day.day_index, date=day.date, is_rest=day.is_rest,
             workout=_to_out(log) if log else None,

@@ -380,11 +380,17 @@ class DailyProgramEngine:
 
     def _volume_scheme(self, user: User) -> dict:
         base = dict(_VOLUME_BY_LEVEL.get(user.fitness_level, _VOLUME_BY_LEVEL["beginner"]))
-        if "strength" in user.goals:
-            return {"sets": base["sets"] + 1, "reps": "4-6", "rest": 120}
-        if "endurance" in user.goals or "weight_loss" in user.goals:
+        goals = set(user.goals)
+        hypertrophy = goals & {"muscle_gain", "hypertrophy", "bodybuilding"}
+        # endurance / weight-loss only (no strength or size goal) → high reps
+        if (goals & {"endurance", "weight_loss"}) and not hypertrophy and "strength" not in goals:
             return {"sets": base["sets"], "reps": "12-15", "rest": 45}
-        return base
+        # pure strength focus → heavy, low reps; but a size goal keeps it moderate
+        if "strength" in goals and not hypertrophy:
+            return {"sets": base["sets"] + 1, "reps": "5-8", "rest": 120}
+        if hypertrophy:
+            return {"sets": base["sets"], "reps": "8-12", "rest": max(60, base["rest"] - 15)}
+        return base  # level default: beginner 10-12, intermediate 8-12, advanced 6-10
 
     # ── Suggestibility filter + substitution/tooltip pass ───────────────
 
