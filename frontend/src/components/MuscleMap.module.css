@@ -1,0 +1,11 @@
+.wrap { display: flex; flex-direction: column; gap: 12px; }
+.toolbar { display: flex; justify-content: center; }
+.stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  min-height: 240px;
+}
+.loading { position: absolute; inset: 0; display: grid; place-items: center; }
+.svgHost { width: 100%; max-width: 460px; }
+.svgHost :global(.vf-mm-svg) { width: 100%; height: auto; }

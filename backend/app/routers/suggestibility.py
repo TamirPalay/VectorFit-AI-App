@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -80,6 +80,22 @@ def list_rejections(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return rows
+
+
+@router.delete("/rejections/{rejection_id}", status_code=204)
+def delete_rejection(user_id: int, rejection_id: int, db: Session = Depends(get_db)):
+    """Undo a rejection — the exercise becomes eligible again on the next
+    suggestion (nothing is cached)."""
+    _get_user_or_404(user_id, db)
+    row = (
+        db.query(RejectionEvent)
+        .filter(RejectionEvent.id == rejection_id, RejectionEvent.user_id == user_id)
+        .first()
+    )
+    if row:
+        db.delete(row)
+        db.commit()
+    return Response(status_code=204)
 
 
 # ── Single exercise suggestibility ───────────────────────────────────────────

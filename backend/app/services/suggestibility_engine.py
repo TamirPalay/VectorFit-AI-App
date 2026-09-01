@@ -44,6 +44,39 @@ _BODY_PART_FLAGS = {
     "hamstring": {"hip_flexion_under_load", "knee_flexion_under_load"},
 }
 
+# Muscles that belong to an injured region. Used to scope a force-direction
+# restriction (e.g. against_gravity) to exercises that actually load the injured
+# area — so a right-shoulder injury blocks the overhead press but not the calf
+# raise, even though both are "against gravity".
+_BODY_PART_MUSCLES = {
+    "shoulder":  {"anterior_deltoid", "lateral_deltoid", "posterior_deltoid", "traps_upper"},
+    "rotator":   {"anterior_deltoid", "lateral_deltoid", "posterior_deltoid"},
+    "deltoid":   {"anterior_deltoid", "lateral_deltoid", "posterior_deltoid"},
+    "elbow":     {"biceps", "triceps", "forearms"},
+    "bicep":     {"biceps", "forearms"},
+    "tricep":    {"triceps"},
+    "wrist":     {"forearms"},
+    "forearm":   {"forearms"},
+    "knee":      {"quads", "hamstrings"},
+    "patellar":  {"quads"},
+    "quad":      {"quads"},
+    "lower back": {"erector_spinae", "lats", "glutes"},
+    "lumbar":    {"erector_spinae", "lats", "glutes"},
+    "spine":     {"erector_spinae"},
+    "back":      {"lats", "rhomboids", "traps_mid", "traps_upper", "erector_spinae"},
+    "hip":       {"glutes", "hip_flexors", "adductors", "abductors"},
+    "glute":     {"glutes"},
+    "groin":     {"adductors"},
+    "adductor":  {"adductors"},
+    "neck":      {"traps_upper"},
+    "cervical":  {"traps_upper"},
+    "ankle":     {"calves"},
+    "achilles":  {"calves"},
+    "calf":      {"calves"},
+    "hamstring": {"hamstrings"},
+}
+_REGION_ACTIVATION_THRESHOLD = 0.4
+
 
 class SuggestibilityState(str, Enum):
     ELIGIBLE = "eligible"
@@ -70,6 +103,23 @@ def flags_for_body_part(body_part: str) -> set:
         if keyword in bp:
             result |= flags
     return result
+
+
+def muscles_for_body_part(body_part: str) -> set:
+    bp = body_part.lower()
+    result: set = set()
+    for keyword, muscles in _BODY_PART_MUSCLES.items():
+        if keyword in bp:
+            result |= muscles
+    return result
+
+
+def _exercise_loads_region(exercise: dict, region_muscles: set) -> bool:
+    """True if the exercise meaningfully loads any muscle of the injured region."""
+    if not region_muscles:
+        return True  # unknown region — fall back to the old blunt behaviour
+    activation = exercise.get("muscle_activation", {})
+    return any(activation.get(m, 0.0) >= _REGION_ACTIVATION_THRESHOLD for m in region_muscles)
 
 
 def compute_preference_score(rejections: list) -> float:
@@ -136,7 +186,25 @@ class SuggestibilityEngine:
             if getattr(injury, "restricted_force_directions_json", None):
                 restricted = set(json.loads(injury.restricted_force_directions_json))
             conflicting = exercise_flags & implied
-            force_conflict = exercise_force in restricted
+            force_restricted = exercise_force in restricted
+
+            # A force-direction restriction only bites when the exercise also
+            # loads the injured region — otherwise a blanket "against_gravity"
+            # restriction blocks half the dataset (calf raises, planks, squats
+            # for a shoulder injury). A joint-flag match always counts as
+            # loading the region.
+            region_muscles = muscles_for_body_part(injury.body_part)
+            loads_region = bool(conflicting) or _exercise_loads_region(exercise, region_muscles)
+            force_conflict = force_restricted and loads_region
+
+            # When the injury explicitly restricts certain force directions
+            # (the physio said "avoid against-gravity loading"), an exercise
+            # that uses a *permitted* direction isn't a hard block even if it
+            # trips a joint-stress flag — supported bench press vs. push-up for
+            # a shoulder. The flag becomes informational, not suppressing.
+            if conflicting and restricted and not force_restricted:
+                conflicting = set()
+
             if not conflicting and not force_conflict:
                 continue
             suppressed_until = None

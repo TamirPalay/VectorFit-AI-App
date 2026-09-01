@@ -690,8 +690,12 @@ def render_muscle_map_svg(
         fill = dark if themed == "dark" else light
         cls = f"mm-musc mmd{i}" if themed == "auto" else "mm-musc"
         name = _html.escape(MUSCLE_DISPLAY.get(muscle, {}).get("display_name", muscle))
-        body.append(f'<path class="{cls}" fill="{fill}" d="{reg["path"]}">'
-                    f'<title>{name}: {int(round(totals.get(muscle, 0.0)))}</title></path>')
+        group = MUSCLE_GROUP.get(muscle, muscle)
+        rel_pct = int(round(100 * totals.get(muscle, 0.0) / vmax)) if vmax > 0 else 0
+        tip = f"{name}: {rel_pct}% activation"
+        body.append(f'<path class="{cls}" fill="{fill}" data-muscle="{muscle}" '
+                    f'data-group="{group}" data-pct="{rel_pct}" style="cursor:pointer" d="{reg["path"]}">'
+                    f'<title>{tip}</title></path>')
         if themed == "auto":
             dark_rules.append(f".mmd{i}{{fill:{dark};}}")
 
@@ -714,8 +718,8 @@ def render_muscle_map_svg(
     stops = "".join(f'<stop offset="{k / 5:.2f}" stop-color="{ramp[k]}"/>' for k in range(6))
     body.append(f'<defs><linearGradient id="mmg">{stops}</linearGradient></defs>'
                 f'<rect x="{fx + 1}" y="{ly}" width="26" height="2.6" rx="1.3" fill="url(#mmg)"/>'
-                f'<text class="mm-muted" x="{fx + 0.5}" y="{ly + 5.6}" font-size="2.1">low load</text>'
-                f'<text class="mm-muted" x="{fx + 23}" y="{ly + 5.6}" font-size="2.1">peak</text>')
+                f'<text class="mm-muted" x="{fx + 0.5}" y="{ly + 5.6}" font-size="2.1">less worked</text>'
+                f'<text class="mm-muted" x="{fx + 20.5}" y="{ly + 5.6}" font-size="2.1">hardest worked</text>')
     top = [(MUSCLE_DISPLAY.get(m, {}).get("display_name", m), v)
            for m, v in sorted(totals.items(), key=lambda kv: -kv[1])[:5] if v > 0]
     if top:

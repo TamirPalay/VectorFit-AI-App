@@ -12,8 +12,10 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.data.muscles import MUSCLES
 from app.database import get_db
 from app.models.user import User
 from app.services import dashboard_analytics as da
@@ -21,6 +23,9 @@ from app.services import dashboard_analytics as da
 router = APIRouter(prefix="/users/{user_id}/dashboard", tags=["dashboard"])
 
 _PNG = "image/png"
+# A workout "trains" a muscle when at least one exercise recruits it at >= this
+# raw activation (matches the exact-muscle filter threshold used elsewhere).
+_MUSCLE_FILTER_THRESHOLD = 0.30
 
 
 def _get_user_or_404(user_id: int, db: Session) -> User:
@@ -38,11 +43,20 @@ def _index(request: Request):
 
 
 def _range(request: Request, db: Session, user_id: int, date_from: date | None, date_to: date | None,
-           status: str = "completed", days: int = 90):
+           status: str = "completed", days: int = 90, muscle: str | None = None):
     user = _get_user_or_404(user_id, db)
     index = _index(request)
     start, end = da.default_range(date_from, date_to, days)
     sessions_df, exercises_df = da.load_frames(db, index, user_id, start, end, status)
+    if muscle and muscle in MUSCLES and not exercises_df.empty:
+        # exercises_df[muscle] holds activation-load (activation × sets); recover
+        # the raw activation to test the threshold, then keep only sessions that
+        # still have a qualifying exercise so every chart is muscle-scoped.
+        raw = exercises_df[muscle] / exercises_df["sets"].where(exercises_df["sets"] > 0, 1)
+        exercises_df = exercises_df[raw >= _MUSCLE_FILTER_THRESHOLD]
+        keep = set(exercises_df["log_id"]) if not exercises_df.empty else set()
+        if not sessions_df.empty:
+            sessions_df = sessions_df[sessions_df["log_id"].isin(keep)]
     return user, index, start, end, sessions_df, exercises_df
 
 
@@ -52,8 +66,9 @@ def _range(request: Request, db: Session, user_id: int, date_from: date | None, 
 def summary(
     user_id: int, request: Request, db: Session = Depends(get_db),
     date_from: date | None = Query(None), date_to: date | None = Query(None),
+    muscle: str | None = Query(None),
 ):
-    user, index, start, end, s_df, e_df = _range(request, db, user_id, date_from, date_to, days=90)
+    user, index, start, end, s_df, e_df = _range(request, db, user_id, date_from, date_to, days=90, muscle=muscle)
     m_df = da.load_metrics(db, user_id, start, end)
     return da.build_summary(db, index, user, s_df, e_df, m_df, start, end)
 
@@ -67,10 +82,11 @@ def muscle_activation(
     bucket: str = Query("week", pattern="^(day|week|month)$"),
     group: str = Query("body_part", pattern="^(muscle|body_part)$"),
     normalize: str = Query("none", pattern="^(none|per_bucket)$"),
+    muscle: str | None = Query(None),
 ):
     """Time-bucketed activation-load matrix (buckets x muscles). For the visual
     body map, use /muscle-map."""
-    *_, e_df = _range(request, db, user_id, date_from, date_to, days=90)
+    *_, e_df = _range(request, db, user_id, date_from, date_to, days=90, muscle=muscle)
     return da.muscle_activation(e_df, bucket, group, normalize)
 
 
@@ -105,6 +121,50 @@ def muscle_map(
     return Response(svg, media_type="image/svg+xml")
 
 
+# ── Muscle map for an arbitrary exercise list (a planned workout, live builder) ─
+
+class _MapPreviewItem(BaseModel):
+    exercise_id: str
+    sets: float = Field(1, ge=0)
+
+
+class _MapPreviewRequest(BaseModel):
+    items: list[_MapPreviewItem] = Field(default_factory=list)
+    title: str = ""
+    subtitle: str = ""
+
+
+@router.post("/muscle-map/preview")
+def muscle_map_preview(
+    user_id: int, body: _MapPreviewRequest, request: Request, db: Session = Depends(get_db),
+    view: str = Query("both", pattern="^(both|front|back)$"),
+    theme: str = Query("auto", pattern="^(auto|light|dark)$"),
+    format: str = Query("svg", pattern="^(svg|json)$"),
+):
+    """Render the anatomical map from a set of exercises + set counts — no
+    workout history needed. Powers the muscle map on Today's planned workout and
+    the live, clickable map in the custom builder. This is pure arithmetic on
+    the exercise labels (activation × sets); no LLM, no engine."""
+    _get_user_or_404(user_id, db)
+    index = _index(request)
+    totals = {m: 0.0 for m in MUSCLES}
+    for item in body.items:
+        ex = index.get_by_id(item.exercise_id)
+        if not ex:
+            continue
+        for m, v in ex["muscle_activation"].items():
+            if m in totals:
+                totals[m] += v * item.sets
+    totals = {m: round(v, 2) for m, v in totals.items()}
+
+    if format == "json":
+        return {"totals": totals, "peak_muscle": max(totals, key=totals.get) if any(totals.values()) else None}
+    svg = da.render_muscle_map_svg(
+        totals, body.title, body.subtitle or "Projected muscle load for this workout", view, theme,
+    )
+    return Response(svg, media_type="image/svg+xml")
+
+
 # ── Volume ───────────────────────────────────────────────────────────────────
 
 @router.get("/volume")
@@ -113,8 +173,9 @@ def volume(
     date_from: date | None = Query(None), date_to: date | None = Query(None),
     bucket: str = Query("week", pattern="^(day|week|month)$"),
     format: str = Query("json", pattern="^(json|png)$"),
+    muscle: str | None = Query(None),
 ):
-    _, _, _, _, s_df, e_df = _range(request, db, user_id, date_from, date_to, days=90)
+    _, _, _, _, s_df, e_df = _range(request, db, user_id, date_from, date_to, days=90, muscle=muscle)
     data = da.volume_series(s_df, e_df, bucket)
     if format == "png":
         return Response(da.png_bar(data["buckets"], data["activation_load"],
@@ -145,8 +206,9 @@ def workouts(
 def consistency(
     user_id: int, request: Request, db: Session = Depends(get_db),
     weeks: int = Query(12, ge=1, le=53),
+    muscle: str | None = Query(None),
 ):
-    user, index, start, end, s_df, _ = _range(request, db, user_id, None, None, days=weeks * 7)
+    user, index, start, end, s_df, _ = _range(request, db, user_id, None, None, days=weeks * 7, muscle=muscle)
     return da.consistency(s_df, weeks, end)
 
 
@@ -157,8 +219,9 @@ def balance(
     user_id: int, request: Request, db: Session = Depends(get_db),
     date_from: date | None = Query(None), date_to: date | None = Query(None),
     format: str = Query("json", pattern="^(json|png)$"),
+    muscle: str | None = Query(None),
 ):
-    *_, e_df = _range(request, db, user_id, date_from, date_to, days=90)
+    *_, e_df = _range(request, db, user_id, date_from, date_to, days=90, muscle=muscle)
     data = da.balance(e_df)
     if format == "png":
         return Response(da.png_bar(list(data["by_group"].keys()), list(data["by_group"].values()),
@@ -172,8 +235,9 @@ def balance(
 def patterns(
     user_id: int, request: Request, db: Session = Depends(get_db),
     date_from: date | None = Query(None), date_to: date | None = Query(None),
+    muscle: str | None = Query(None),
 ):
-    *_, e_df = _range(request, db, user_id, date_from, date_to, days=90)
+    *_, e_df = _range(request, db, user_id, date_from, date_to, days=90, muscle=muscle)
     return da.patterns(e_df)
 
 
@@ -196,8 +260,9 @@ def rejections(
 def substitutions(
     user_id: int, request: Request, db: Session = Depends(get_db),
     date_from: date | None = Query(None), date_to: date | None = Query(None),
+    muscle: str | None = Query(None),
 ):
-    _, _, _, _, s_df, e_df = _range(request, db, user_id, date_from, date_to, days=90)
+    _, _, _, _, s_df, e_df = _range(request, db, user_id, date_from, date_to, days=90, muscle=muscle)
     return da.substitutions(s_df, e_df)
 
 

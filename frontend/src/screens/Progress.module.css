@@ -1,0 +1,64 @@
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 620px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 14px;
+}
+
+.rangeRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  animation: vf-fade-up 240ms ease;
+}
+.rangeRow h1 { font-size: clamp(1.7rem, 4.5vw, 2.3rem); }
+
+.split { display: grid; gap: 14px; }
+@media (min-width: 760px) { .split.two { grid-template-columns: 1fr 1fr; } }
+
+.metricTabs { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.miniStat { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.82rem; }
+.miniStat b { font-family: var(--font-display); font-size: 1.15rem; display: block; }
+
+.list { display: flex; flex-direction: column; }
+.listRow {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem;
+}
+.listRow:last-child { border-bottom: none; }
+.listRow .count { font-family: var(--font-mono); color: var(--text-dim); font-size: 0.8rem; }
+
+.timeline { display: flex; flex-direction: column; gap: 12px; }
+.tlItem {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 12px;
+}
+.tlDot {
+  width: 10px; height: 10px; border-radius: 50%;
+  margin-top: 5px;
+  border: 2px solid var(--surface);
+}
+.tlBody .tlHead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.tlBody .tlHead h4 { font-size: 1rem; text-transform: capitalize; }
+.tlBody .tlMeta { font-size: 0.8rem; color: var(--text-dim); }
+
+.prRow {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+  padding: 11px 0; border-bottom: 1px solid var(--border);
+}
+.prRow:last-child { border-bottom: none; }
+.prRow .ex { font-weight: 600; font-size: 0.9rem; }
+.prRow .best { font-family: var(--font-display); font-size: 1.25rem; }
+.prRow .best small { font-size: 0.6em; color: var(--text-dim); }
+.prRow .gain { font-size: 0.76rem; color: var(--good); font-family: var(--font-mono); }
+.prRow .prog { grid-column: 1 / -1; }

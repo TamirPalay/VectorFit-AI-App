@@ -32,6 +32,31 @@ def _get_user_or_404(user_id: int, db: Session) -> User:
     return user
 
 
+_SOFT_DISLIKE_NOTE = "soft-dislike"
+
+
+def _record_soft_dislike(db: Session, user_id: int, exercise_id: str, exercise_name: str) -> None:
+    """A 👎 (disliked) is a soft "fewer of these" signal — recorded as a
+    `dont_like` RejectionEvent so the suggestibility engine's preference score
+    picks it up (-0.15, still eligible), NOT a hard ✕ rejection. Tagged with a
+    marker note so the UI can list it under "You disliked" rather than
+    "Won't be suggested". Idempotent per exercise."""
+    exists = (
+        db.query(RejectionEvent)
+        .filter(
+            RejectionEvent.user_id == user_id,
+            RejectionEvent.exercise_id == exercise_id,
+            RejectionEvent.note == _SOFT_DISLIKE_NOTE,
+        )
+        .first()
+    )
+    if exists is None:
+        db.add(RejectionEvent(
+            user_id=user_id, exercise_id=exercise_id, exercise_name=exercise_name,
+            reason="dont_like", note=_SOFT_DISLIKE_NOTE, created_at=datetime.now(timezone.utc),
+        ))
+
+
 def _get_log_or_404(user_id: int, log_id: int, db: Session) -> WorkoutLog:
     log = db.query(WorkoutLog).filter(WorkoutLog.id == log_id, WorkoutLog.user_id == user_id).first()
     if not log:
@@ -144,6 +169,8 @@ def complete_log(
                     reason=reason, note="Auto-logged from workout completion",
                     created_at=datetime.now(timezone.utc),
                 ))
+            elif perf.feedback == "disliked":
+                _record_soft_dislike(db, user_id, we.exercise_id, we.exercise_name)
     db.commit()
     db.refresh(log)
     return _out(log)

@@ -281,12 +281,9 @@ class DailyProgramEngine:
         }
         return max(scored, key=scored.get)
 
-    def resolve_day_type(self, user: User, target_date: date) -> str | None:
-        """For a single ad-hoc day (not a week batch): rest if the user has
-        already hit their weekly training-day quota this calendar week,
-        otherwise the best-scoring type given real history."""
-        if self._trained_days_this_calendar_week(user.id, target_date) >= user.days_per_week:
-            return None
+    def _pick_type(self, user: User, target_date: date) -> str:
+        """Best-scoring workout type for this day given real history (ignores the
+        weekly rest quota — callers decide whether rest is allowed)."""
         return self._choose_type(
             user,
             recent_volume=self._recent_pattern_volume(user.id, target_date),
@@ -296,6 +293,14 @@ class DailyProgramEngine:
             prev_type=self._last_workout_type(user.id, target_date),
             used_this_week={},
         )
+
+    def resolve_day_type(self, user: User, target_date: date) -> str | None:
+        """For a single ad-hoc day (not a week batch): rest if the user has
+        already hit their weekly training-day quota this calendar week,
+        otherwise the best-scoring type given real history."""
+        if self._trained_days_this_calendar_week(user.id, target_date) >= user.days_per_week:
+            return None
+        return self._pick_type(user, target_date)
 
     def _rest_day_indices(self, days_per_week: int) -> set[int]:
         training_days = max(0, min(days_per_week, 7))
@@ -380,11 +385,17 @@ class DailyProgramEngine:
 
     def _volume_scheme(self, user: User) -> dict:
         base = dict(_VOLUME_BY_LEVEL.get(user.fitness_level, _VOLUME_BY_LEVEL["beginner"]))
-        if "strength" in user.goals:
-            return {"sets": base["sets"] + 1, "reps": "4-6", "rest": 120}
-        if "endurance" in user.goals or "weight_loss" in user.goals:
+        goals = set(user.goals)
+        hypertrophy = goals & {"muscle_gain", "hypertrophy", "bodybuilding"}
+        # endurance / weight-loss only (no strength or size goal) → high reps
+        if (goals & {"endurance", "weight_loss"}) and not hypertrophy and "strength" not in goals:
             return {"sets": base["sets"], "reps": "12-15", "rest": 45}
-        return base
+        # pure strength focus → heavy, low reps; but a size goal keeps it moderate
+        if "strength" in goals and not hypertrophy:
+            return {"sets": base["sets"] + 1, "reps": "5-8", "rest": 120}
+        if hypertrophy:
+            return {"sets": base["sets"], "reps": "8-12", "rest": max(60, base["rest"] - 15)}
+        return base  # level default: beginner 10-12, intermediate 8-12, advanced 6-10
 
     # ── Suggestibility filter + substitution/tooltip pass ───────────────
 
@@ -492,10 +503,16 @@ class DailyProgramEngine:
 
     # ── Public entry points ──────────────────────────────────────────────
 
-    async def generate_day(self, user: User, target_date: date, day_index: int = 0) -> DayPlan:
+    async def generate_day(
+        self, user: User, target_date: date, day_index: int = 0, allow_rest: bool = True
+    ) -> DayPlan:
         workout_type = self.resolve_day_type(user, target_date)
         if workout_type is None:
-            return DayPlan(day_index=day_index, date=target_date, is_rest=True)
+            if allow_rest:
+                return DayPlan(day_index=day_index, date=target_date, is_rest=True)
+            # User explicitly asked to train through a scheduled rest day — give
+            # them the best-fitting type anyway.
+            workout_type = self._pick_type(user, target_date)
         return await self._build_day(user, target_date, day_index, workout_type)
 
     async def generate_week(self, user: User, start_date: date) -> list[DayPlan]:

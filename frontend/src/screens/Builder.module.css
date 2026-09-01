@@ -1,0 +1,94 @@
+.head { display: flex; flex-direction: column; gap: 10px; }
+.nameInput {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--border);
+  padding: 4px 2px;
+  width: 100%;
+}
+.nameInput:focus { outline: none; border-color: var(--accent); }
+
+.exRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.exRow:last-child { border-bottom: none; }
+.reorder { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.reorder button {
+  width: 24px; height: 20px;
+  display: grid; place-items: center;
+  color: var(--text-faint);
+  border-radius: 5px;
+}
+.reorder button:hover { background: var(--surface-2); color: var(--text); }
+.reorder button:disabled { opacity: 0.25; pointer-events: none; }
+.exRow .info { flex: 1; min-width: 0; }
+.exRow .info .n { font-weight: 600; font-size: 0.92rem; }
+.exRow .info .p { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); }
+.exRow .info .note { font-size: 0.78rem; color: var(--text-faint); }
+.exRow .rowActs { display: flex; gap: 2px; flex-shrink: 0; }
+
+.addBtn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-weight: 600;
+  transition: background 120ms, border-color 120ms;
+}
+.addBtn:hover { background: var(--accent-wash); border-color: var(--accent); }
+
+/* ── analysis ── */
+.analysis { display: flex; flex-direction: column; gap: 12px; }
+.verdictRow { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+.covGrid { display: flex; flex-direction: column; gap: 7px; }
+.covRow { display: grid; grid-template-columns: 78px 1fr; gap: 10px; align-items: center; font-size: 0.8rem; }
+.covRow .cl { color: var(--text-dim); }
+.confList { display: flex; flex-direction: column; gap: 6px; }
+.conf { font-size: 0.82rem; padding: 8px 10px; border-radius: 8px; background: var(--bad-wash); color: var(--bad); }
+.warnItem { font-size: 0.82rem; padding: 8px 10px; border-radius: 8px; background: var(--warn-wash); color: var(--warn); }
+
+/* ── editor sheet ── */
+.editGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field span { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.stepper button {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  display: grid; place-items: center; color: var(--text);
+}
+.stepper button:active { transform: scale(0.9); }
+.stepper .v { font-family: var(--font-display); font-size: 1.2rem; min-width: 28px; text-align: center; }
+
+/* ── picker sheet ── */
+.pickerTools { position: sticky; top: 0; background: var(--surface); z-index: 2; padding-bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
+.searchBox { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1.5px solid var(--border); border-radius: 999px; padding: 8px 14px; }
+.searchBox input { background: transparent; border: none; flex: 1; font-size: 0.92rem; }
+.searchBox input:focus { outline: none; }
+.chipRow { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.chipRow::-webkit-scrollbar { display: none; }
+
+.result {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.result:last-child { border-bottom: none; }
+.result .rn { flex: 1; min-width: 0; }
+.result .rn .rt { font-weight: 600; font-size: 0.9rem; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.result .rn .rs { font-size: 0.74rem; color: var(--text-dim); font-family: var(--font-mono); text-transform: capitalize; }
+.result .addIcon {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+}
+.result .addIcon.in { background: var(--surface-2); color: var(--good); }
+.result .addIcon:active { transform: scale(0.88); }

@@ -1,0 +1,62 @@
+.wrap {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px calc(40px + env(safe-area-inset-bottom));
+}
+.inner { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 22px; animation: vf-fade-up 300ms ease; }
+
+.hero { display: flex; flex-direction: column; gap: 10px; text-align: center; margin-top: 4vh; }
+.hero .mark { font-size: 2.4rem; color: var(--accent); line-height: 1; }
+.hero h1 { font-size: clamp(2.2rem, 8vw, 3rem); }
+.hero p { color: var(--text-dim); font-size: 0.98rem; max-width: 44ch; margin: 0 auto; line-height: 1.6; }
+
+.pickLabel {
+  font-family: var(--font-mono);
+  font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-faint); margin-top: 10px;
+}
+
+.profiles { display: flex; flex-direction: column; gap: 10px; }
+.profileRow { display: flex; align-items: stretch; gap: 8px; }
+.profileRow .profile { flex: 1; min-width: 0; }
+.del {
+  flex-shrink: 0;
+  width: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  transition: color 120ms, border-color 120ms;
+}
+.del:hover { color: var(--bad); border-color: var(--bad); }
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 120ms, transform 100ms;
+}
+.profile:hover { border-color: var(--accent); }
+.profile:active { transform: scale(0.99); }
+.profile .av {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+  font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
+}
+.profile .meta { flex: 1; min-width: 0; }
+.profile .meta .name { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.profile .meta .story { font-size: 0.82rem; color: var(--text-dim); line-height: 1.45; }
+.profile .chev { color: var(--text-faint); flex-shrink: 0; }
+
+.createRow { display: flex; align-items: center; gap: 10px; }
+.rule { flex: 1; height: 1px; background: var(--border); }
+.rule + span { font-size: 0.78rem; color: var(--text-faint); }

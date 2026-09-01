@@ -1,0 +1,180 @@
+/* ── Card ──────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+}
+.card.pad { padding: 16px; }
+.card.flush { padding: 0; }
+.card.inset { background: var(--surface-2); box-shadow: none; }
+.card.tappable { cursor: pointer; transition: transform 120ms ease, border-color 120ms ease; }
+.card.tappable:hover { border-color: var(--border-strong); }
+.card.tappable:active { transform: scale(0.99); }
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sectionTitle small { font-family: var(--font-body); font-weight: 400; font-size: 0.8rem; color: var(--text-dim); }
+
+/* ── Button ────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  transition: background 120ms ease, transform 100ms ease, border-color 120ms ease, opacity 120ms;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; pointer-events: none; }
+.btn.block { width: 100%; }
+.btn.sm { padding: 8px 13px; font-size: 0.84rem; }
+.btn.lg { padding: 14px 24px; font-size: 1rem; }
+
+.primary { background: var(--accent); color: var(--accent-ink); }
+.primary:hover { background: var(--accent-hover); }
+.secondary { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.secondary:hover { border-color: var(--border-strong); }
+.ghost { background: transparent; color: var(--text-dim); }
+.ghost:hover { background: var(--surface-2); color: var(--text); }
+.danger { background: var(--bad-wash); color: var(--bad); }
+.danger:hover { filter: brightness(0.97); }
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--text-dim);
+  transition: background 120ms, color 120ms;
+  flex-shrink: 0;
+}
+.iconBtn:hover { background: var(--surface-2); color: var(--text); }
+.iconBtn:active { transform: scale(0.92); }
+
+/* ── Chip (toggle / filter) ────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  transition: all 110ms ease;
+  white-space: nowrap;
+}
+.chip:hover { border-color: var(--border-strong); color: var(--text); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip .count { font-family: var(--font-mono); font-size: 0.72rem; opacity: 0.7; }
+
+/* ── Pill (status badge, non-interactive) ──────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.pill.good { background: var(--good-wash); color: var(--good); }
+.pill.warn { background: var(--warn-wash); color: var(--warn); }
+.pill.bad  { background: var(--bad-wash);  color: var(--bad); }
+.pill.pref { background: var(--pref-wash); color: var(--pref); }
+.pill.info { background: var(--info-wash); color: var(--info); }
+.pill.plain { background: var(--surface-2); color: var(--text-dim); }
+
+/* ── Stat tile ─────────────────────────────────────────── */
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat .label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.stat .value {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 5vw, 1.9rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.stat .value .unit { font-size: 0.62em; color: var(--text-dim); font-weight: 600; margin-left: 2px; }
+.stat .sub { font-size: 0.76rem; color: var(--text-dim); }
+
+/* ── Segmented control ─────────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.segmented button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  transition: all 120ms;
+  white-space: nowrap;
+}
+.segmented button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
+
+/* ── Feedback states ───────────────────────────────────── */
+.spinner {
+  width: 20px; height: 20px;
+  border: 2.5px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: vf-spin 0.7s linear infinite;
+}
+.loader { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 16px; color: var(--text-dim); }
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center; padding: 40px 20px; color: var(--text-dim);
+}
+.empty .emoji { font-size: 2rem; }
+.empty h3 { font-family: var(--font-display); color: var(--text); }
+.errorBox {
+  border: 1px solid var(--bad); background: var(--bad-wash); color: var(--bad);
+  border-radius: var(--radius); padding: 14px 16px; font-size: 0.88rem;
+}
+
+/* ── Progress ring ─────────────────────────────────────── */
+.ring { position: relative; display: inline-grid; place-items: center; }
+.ring svg { transform: rotate(-90deg); }
+.ring .ringLabel {
+  position: absolute;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Bar (mini horizontal meter) ───────────────────────── */
+.bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 400ms ease; }
