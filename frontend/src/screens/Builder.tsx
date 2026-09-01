@@ -10,6 +10,8 @@ import { Sheet } from "../components/ui/Sheet";
 import { useToast } from "../components/ui/Toast";
 import { ExercisePicker } from "../components/builder/ExercisePicker";
 import { ExerciseDetailSheet } from "../components/ExerciseDetailSheet";
+import { MuscleMapPreview } from "../components/MuscleMapPreview";
+import { AiNote } from "../components/ui/AiNote";
 import { ArrowDown, ArrowUp, Check, ChevronLeft, Edit, Minus, Play, Plus, Trash } from "../components/icons";
 import type { Exercise, WorkoutExercise } from "../lib/types";
 import s from "./Builder.module.css";
@@ -82,6 +84,7 @@ function BuilderEdit({ workoutId }: { workoutId: number }) {
   const optsQ = useQuery({ queryKey: ["builderOptions", id], queryFn: () => api.builderOptions(id) });
 
   const [picking, setPicking] = useState(false);
+  const [pickMuscle, setPickMuscle] = useState<string | null>(null);
   const [editing, setEditing] = useState<WorkoutExercise | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -227,14 +230,40 @@ function BuilderEdit({ workoutId }: { workoutId: number }) {
         ))}
       </Card>
 
-      <button className={s.addBtn} onClick={() => setPicking(true)}>
+      <button className={s.addBtn} onClick={() => { setPickMuscle(null); setPicking(true); }}>
         <Plus width="1.1em" height="1.1em" /> Add exercise
       </button>
+
+      {/* Muscle map — tap a region to filter the picker */}
+      <Card>
+        <SectionTitle extra="tap to filter">Muscle map</SectionTitle>
+        <div style={{ marginTop: 10 }}>
+          <MuscleMapPreview
+            userId={id}
+            items={exs.map((e) => ({ exercise_id: e.exercise_id, sets: e.sets }))}
+            showToggle
+            activeMuscle={pickMuscle}
+            onMuscleClick={(m) => { setPickMuscle(m); setPicking(true); }}
+          />
+        </div>
+      </Card>
 
       {/* Analysis */}
       {exs.length > 0 && aQ.data && (
         <Card>
           <SectionTitle extra={`~${aQ.data.estimated_minutes} min`}>Workout check</SectionTitle>
+          <div style={{ marginTop: 10 }}>
+            <AiNote kind="engine" plain details={
+              <>
+                Muscle coverage and estimated minutes are pure arithmetic on the exercise labels.
+                The injury / cooldown conflicts below come from the <b>suggestibility engine</b> checking
+                every pick against your active injuries and recent rejections — the same engine that
+                auto-swaps exercises in your daily program. Nothing here is blocked; it's advice.
+              </>
+            }>
+              This check is run by the engine, not the AI coach — it never changes your picks, just flags them.
+            </AiNote>
+          </div>
           <div className={s.analysis} style={{ marginTop: 12 }}>
             <div className={s.verdictRow}>
               <Pill token={verdictToken(aQ.data.duration_verdict)}>{verdictLabel(aQ.data.duration_verdict, aQ.data.estimated_minutes, aQ.data.target_minutes)}</Pill>
@@ -288,8 +317,9 @@ function BuilderEdit({ workoutId }: { workoutId: number }) {
           workoutId={workoutId}
           addedIds={addedIds}
           adding={addingId}
+          initialMuscle={pickMuscle}
           onAdd={(exId) => add.mutate(exId)}
-          onClose={() => setPicking(false)}
+          onClose={() => { setPicking(false); setPickMuscle(null); }}
         />
       )}
       {detail && <ExerciseDetailSheet exercise={detail} userId={id} onClose={() => setDetail(null)} />}

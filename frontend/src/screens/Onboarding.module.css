@@ -19,6 +19,20 @@
 }
 
 .profiles { display: flex; flex-direction: column; gap: 10px; }
+.profileRow { display: flex; align-items: stretch; gap: 8px; }
+.profileRow .profile { flex: 1; min-width: 0; }
+.del {
+  flex-shrink: 0;
+  width: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  transition: color 120ms, border-color 120ms;
+}
+.del:hover { color: var(--bad); border-color: var(--bad); }
 .profile {
   display: flex;
   align-items: center;

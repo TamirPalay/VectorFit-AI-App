@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQueries, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useUser } from "../context/UserContext";
 import { Button, Pill, Spinner } from "../components/ui/primitives";
 import { Sheet } from "../components/ui/Sheet";
-import { ChevronRight } from "../components/icons";
+import { ChevronRight, Trash } from "../components/icons";
+import { useToast } from "../components/ui/Toast";
 import { titleCase } from "../lib/format";
 import type { User } from "../lib/types";
 import s from "./Onboarding.module.css";
@@ -21,18 +22,19 @@ function story(u: User): string {
 
 export function Onboarding() {
   const { setUserId } = useUser();
+  const qc = useQueryClient();
+  const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
 
-  const results = useQueries({
-    queries: [1, 2, 3].map((id) => ({
-      queryKey: ["user", id],
-      queryFn: () => api.getUser(id),
-      retry: 0,
-    })),
-  });
+  const usersQ = useQuery({ queryKey: ["users-list"], queryFn: () => api.listUsers(), retry: 0 });
+  const loading = usersQ.isLoading;
+  const users = usersQ.data ?? [];
 
-  const loading = results.some((r) => r.isLoading);
-  const users = results.map((r) => r.data).filter((u): u is User => !!u);
+  const del = useMutation({
+    mutationFn: (uid: number) => api.deleteUser(uid),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users-list"] }); toast("Profile deleted"); },
+    onError: (e: Error) => toast(e.message, "err"),
+  });
 
   return (
     <div className={s.wrap}>
@@ -55,17 +57,32 @@ export function Onboarding() {
           {users.map((u) => {
             const inj = u.injuries.find((i) => !i.healed_at);
             return (
-              <button key={u.id} className={s.profile} onClick={() => setUserId(u.id)}>
-                <span className={s.av}>{initials(u.name)}</span>
-                <span className={s.meta}>
-                  <span className="row spread gap-2">
-                    <span className={s.name}>{u.name}</span>
-                    {inj ? <Pill token="bad" dot>{titleCase(inj.body_part)}</Pill> : <Pill token="good" dot>Clear</Pill>}
+              <div key={u.id} className={s.profileRow}>
+                <button className={s.profile} onClick={() => setUserId(u.id)}>
+                  <span className={s.av}>{initials(u.name)}</span>
+                  <span className={s.meta}>
+                    <span className="row spread gap-2">
+                      <span className={s.name}>{u.name}</span>
+                      {inj ? <Pill token="bad" dot>{titleCase(inj.body_part)}</Pill> : <Pill token="good" dot>Clear</Pill>}
+                    </span>
+                    <span className={s.story}>{story(u)}</span>
                   </span>
-                  <span className={s.story}>{story(u)}</span>
-                </span>
-                <ChevronRight className={s.chev} />
-              </button>
+                  <ChevronRight className={s.chev} />
+                </button>
+                <button
+                  className={s.del}
+                  title={`Delete ${u.name}`}
+                  aria-label={`Delete ${u.name}`}
+                  disabled={del.isPending}
+                  onClick={() => {
+                    if (confirm(`Delete "${u.name}" and all their workouts, metrics and preferences? This can't be undone.`)) {
+                      del.mutate(u.id);
+                    }
+                  }}
+                >
+                  <Trash width="1em" height="1em" />
+                </button>
+              </div>
             );
           })}
           {!loading && users.length === 0 && (
@@ -92,6 +109,7 @@ const GOALS = ["general_fitness", "strength", "muscle_gain", "hypertrophy", "end
 const EQUIP = ["bodyweight", "dumbbells", "barbell", "kettlebell", "pull_up_bar", "resistance_bands", "cables", "machines", "bench", "squat_rack"];
 
 function CreateProfile({ onClose, onCreated }: { onClose: () => void; onCreated: (id: number) => void }) {
+  const qc = useQueryClient();
   const [name, setName] = useState("");
   const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced">("beginner");
   const [days, setDays] = useState(3);
@@ -114,7 +132,12 @@ function CreateProfile({ onClose, onCreated }: { onClose: () => void; onCreated:
         goals,
         equipment,
       }),
-    onSuccess: (u) => { onCreated(u.id); onClose(); },
+    onSuccess: (u) => {
+      qc.setQueryData(["users-list"], (prev: User[] | undefined) => [...(prev ?? []), u]);
+      qc.invalidateQueries({ queryKey: ["users-list"] });
+      onCreated(u.id);
+      onClose();
+    },
   });
 
   return (

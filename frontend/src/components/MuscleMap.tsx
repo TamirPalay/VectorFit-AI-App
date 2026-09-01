@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE } from "../lib/api";
+import { scrubMuscleSvg } from "../lib/muscleSvg";
+import { MUSCLE_LABEL } from "../lib/muscleLabels";
 import { Segmented, Spinner } from "./ui/primitives";
 import s from "./MuscleMap.module.css";
 
@@ -11,17 +13,18 @@ interface Props {
   to?: string;
   view: View;
   onView: (v: View) => void;
+  /** when set, tapping a muscle region calls this with the muscle id */
+  onMuscleClick?: (muscle: string) => void;
+  activeMuscle?: string | null;
 }
 
 /**
- * Fetches the server-rendered anatomical SVG and inlines it — scoping its
- * `:root` custom-property block to the <svg> element so it can't leak tokens
- * (notably `--surface`) into the app. Keeps the SVG's hover <title> tooltips
- * and its own light/dark `@media` handling.
+ * Fetches the server-rendered anatomical SVG (history-shaded) and inlines it.
+ * Pass `onMuscleClick` to make each region a page-wide filter.
  */
-export function MuscleMap({ userId, from, to, view, onView }: Props) {
+export function MuscleMap({ userId, from, to, view, onView, onMuscleClick, activeMuscle }: Props) {
   const q = useQuery({
-    queryKey: ["muscle-map-svg", userId, view, from, to],
+    queryKey: ["muscle-map-svg", userId, view, from, to, activeMuscle],
     staleTime: 120_000,
     queryFn: async () => {
       const p = new URLSearchParams({ view, format: "svg", theme: "auto" });
@@ -29,21 +32,15 @@ export function MuscleMap({ userId, from, to, view, onView }: Props) {
       if (to) p.set("date_to", to);
       const res = await fetch(`${API_BASE}/users/${userId}/dashboard/muscle-map?${p}`);
       if (!res.ok) throw new Error("Couldn't load the muscle map");
-      const raw = await res.text();
-      return raw
-        .replace(/:root\s*\{/g, "svg{")
-        // drop the server-baked title / subtitle / captions / "most worked"
-        // line — the card supplies its own header, toggle, and summary. Keep
-        // only the low→peak gradient legend.
-        .replace(/<text\b[^>]*font-size="(?:3\.4|3\.2|3|2\.5|2\.4|2\.3)"[^>]*>[^<]*<\/text>/g, "")
-        // reclaim padding that held the removed title (top) + most-worked (bottom)
-        .replace(
-          /viewBox="(-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)"/,
-          (_m, x, y, w, h) => `viewBox="${x} ${Number(y) + 9} ${w} ${Number(h) - 11}"`,
-        )
-        .replace(/<svg /, '<svg class="vf-mm-svg" ');
+      return scrubMuscleSvg(await res.text(), activeMuscle);
     },
   });
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (!onMuscleClick) return;
+    const m = (e.target as HTMLElement).closest("[data-muscle]")?.getAttribute("data-muscle");
+    if (m) onMuscleClick(m);
+  };
 
   return (
     <div className={s.wrap}>
@@ -61,8 +58,22 @@ export function MuscleMap({ userId, from, to, view, onView }: Props) {
       <div className={s.stage}>
         {q.isLoading && <div className={s.loading}><Spinner /></div>}
         {q.isError && <p className="dim" style={{ padding: 24, fontSize: "0.85rem" }}>Muscle map unavailable.</p>}
-        {q.data && <div className={s.svgHost} dangerouslySetInnerHTML={{ __html: q.data }} />}
+        {q.data && (
+          <div
+            className={s.svgHost}
+            onClick={handleClick}
+            style={onMuscleClick ? { cursor: "pointer" } : undefined}
+            dangerouslySetInnerHTML={{ __html: q.data }}
+          />
+        )}
       </div>
+      {onMuscleClick && (
+        <p className="dim" style={{ fontSize: "0.78rem", textAlign: "center" }}>
+          {activeMuscle
+            ? <>Filtering everything below by <b style={{ color: "var(--accent)" }}>{MUSCLE_LABEL[activeMuscle] ?? activeMuscle}</b>. Tap it again to clear.</>
+            : "Tap a muscle to filter the whole page to workouts that trained it."}
+        </p>
+      )}
     </div>
   );
 }

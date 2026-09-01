@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { WorkoutExercise } from "../../lib/types";
 import { prescription, titleCase } from "../../lib/format";
 import { Check, Swap, ThumbsDown, ThumbsUp, X } from "../icons";
+import { AiBadge } from "../ui/AiNote";
 import s from "./ExerciseItem.module.css";
 
 export type FB = "liked" | "disliked" | "rejected" | null;
@@ -61,6 +62,11 @@ export function ExerciseItem({
             <X width="0.8em" height="0.8em" /> Won't suggest again{rejectReason ? ` · ${titleCase(rejectReason)}` : ""}
           </span>
         )}
+        {feedback === "disliked" && (
+          <span className={s.rejTag} style={{ color: "var(--warn)" }}>
+            <ThumbsDown width="0.8em" height="0.8em" /> Fewer of these — still eligible, just deprioritised
+          </span>
+        )}
 
         {swapped && (
           <>
@@ -69,6 +75,7 @@ export function ExerciseItem({
             </button>
             {openNote && (
               <div className={s.swapNote}>
+                <AiBadge kind="ai" title="Written by the AI coach; the swap itself was chosen by the substitution engine" />{" "}
                 {ex.substitution_note || (
                   <>Swapped from <span className={s.from}>{ex.substituted_for_name}</span> to keep you training safely around your injury.</>
                 )}
@@ -81,15 +88,18 @@ export function ExerciseItem({
       {onFeedback && (
         <div className={s.fb}>
           <button className={`${s.fbBtn} ${s.up} ${feedback === "liked" ? s.on : ""}`}
-            aria-label="Liked it" onClick={() => onFeedback(feedback === "liked" ? null : "liked")}>
+            aria-label="Like — more like this" title="Like — keep suggesting these"
+            onClick={() => onFeedback(feedback === "liked" ? null : "liked")}>
             <ThumbsUp width="0.95em" height="0.95em" />
           </button>
           <button className={`${s.fbBtn} ${s.down} ${feedback === "disliked" ? s.on : ""}`}
-            aria-label="Didn't like it" onClick={() => onFeedback(feedback === "disliked" ? null : "disliked")}>
+            aria-label="Fewer of these" title="Fewer of these — stays eligible, just deprioritised (−0.15)"
+            onClick={() => onFeedback(feedback === "disliked" ? null : "disliked")}>
             <ThumbsDown width="0.95em" height="0.95em" />
           </button>
           <button className={`${s.fbBtn} ${s.rej} ${isRejected ? s.on : ""}`}
-            aria-label="Don't suggest this again" onClick={() => onFeedback(isRejected ? null : "rejected")}>
+            aria-label="Don't suggest this again" title="Don't suggest again — pick a reason; may be blocked or cooled down"
+            onClick={() => onFeedback(isRejected ? null : "rejected")}>
             <X width="0.95em" height="0.95em" />
           </button>
         </div>

@@ -8,6 +8,7 @@ import { Button, Card, SectionTitle, Loader, ErrorState, IconButton, EmptyState 
 import { Sheet } from "../components/ui/Sheet";
 import { useToast } from "../components/ui/Toast";
 import { CalendarIcon, Check, ChevronRight, Copy, DumbbellIcon, Edit, Play, Plus, Sparkles, Trash } from "../components/icons";
+import { AiNote } from "../components/ui/AiNote";
 import type { WorkoutLog } from "../lib/types";
 import s from "./Plan.module.css";
 
@@ -86,6 +87,16 @@ export function Plan() {
           </EmptyState>
         )}
         {hasPlan && (
+          <>
+          <AiNote kind="engine" plain details={
+            <>
+              Rest days are spaced evenly for your weekly target. Each training day's type is scored
+              together with the others so the week reads as one program — two leg-heavy days rarely land
+              back to back. Re-plan only rewrites days you haven't done yet.
+            </>
+          }>
+            The week is laid out by the scheduling engine. Workouts you build and schedule sit alongside it.
+          </AiNote>
           <div className="hscroll">
             <div className={s.weekStrip}>
               {days.map((d) => {
@@ -99,7 +110,7 @@ export function Plan() {
                     onClick={() => w && nav(`/progress/workout/${w.id}`)}
                   >
                     <span className={s.dow}>{fmtDayName(d.date)}</span>
-                    <span className={s.label}>{d.is_rest ? "Rest" : w?.workout_label ?? "—"}</span>
+                    <span className={s.label}>{d.is_rest ? "Rest" : w?.workout_label ?? w?.name ?? "—"}</span>
                     <span className={s.sub}>
                       {dn ? <span className={s.doneTick}><Check width="0.9em" height="0.9em" style={{ display: "inline" }} /> done</span>
                         : w ? `${w.exercises.length} exercises` : fmtDate(d.date)}
@@ -109,6 +120,7 @@ export function Plan() {
               })}
             </div>
           </div>
+          </>
         )}
       </Card>
 

@@ -137,41 +137,64 @@ export function MetricChart({ data, unit }: { data: MetricSeries; unit?: string 
   );
 }
 
-// ── Consistency calendar ─────────────────────────────────
-export function ConsistencyGrid({ data }: { data: Consistency }) {
+// ── Consistency — month calendar (habit-tracker style, not a heatmap grid) ──
+export function ConsistencyGrid({ data, onSelectDay, selected }: { data: Consistency; onSelectDay?: (iso: string) => void; selected?: string | null }) {
+  const iso = (d: Date) => d.toLocaleDateString("en-CA");
+  const todayIso = iso(new Date());
   const start = new Date(data.start + "T00:00:00");
   const end = new Date(data.end + "T00:00:00");
-  // pad to week start (Mon)
-  const pad = (start.getDay() + 6) % 7;
-  const days: (string | null)[] = Array(pad).fill(null);
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    days.push(d.toLocaleDateString("en-CA"));
-  }
   const max = Math.max(1, ...Object.values(data.counts));
-  const shade = (n: number) => {
-    if (!n) return "var(--surface-3)";
-    const t = 0.35 + 0.65 * (n / max);
-    return `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--surface-3))`;
-  };
+
+  const months: { key: string; label: string; cells: (string | null)[] }[] = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const stop = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cur <= stop) {
+    const y = cur.getFullYear();
+    const m = cur.getMonth();
+    const lead = (new Date(y, m, 1).getDay() + 6) % 7; // Monday-first
+    const cells: (string | null)[] = Array(lead).fill(null);
+    for (let d = 1; d <= new Date(y, m + 1, 0).getDate(); d++) cells.push(iso(new Date(y, m, d)));
+    months.push({ key: `${y}-${m}`, label: new Date(y, m, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" }), cells });
+    cur.setMonth(m + 1);
+  }
+
+  const fill = (n: number) =>
+    n ? `color-mix(in srgb, var(--accent) ${Math.round((0.4 + 0.6 * (n / max)) * 100)}%, var(--surface-3))` : "var(--surface-3)";
 
   return (
-    <div className={s.calWrap}>
-      <div className={s.calendar}>
-        {days.map((iso, i) => (
-          <div
-            key={i}
-            className={s.cell}
-            style={{ background: iso ? shade(data.counts[iso] ?? 0) : "transparent" }}
-            title={iso ? `${shortDate(iso)} — ${data.counts[iso] ?? 0} workout${(data.counts[iso] ?? 0) === 1 ? "" : "s"}` : undefined}
-          />
-        ))}
-      </div>
-      <div className={s.calScale}>
-        less
-        {[0, 0.4, 0.7, 1].map((t) => (
-          <i key={t} style={{ background: t === 0 ? "var(--surface-3)" : `color-mix(in srgb, var(--accent) ${35 + t * 65}%, var(--surface-3))` }} />
-        ))}
-        more
+    <div className={s.calMonths}>
+      {months.map((mo) => (
+        <div key={mo.key} className={s.calMonth}>
+          <div className={s.calMonthLabel}>{mo.label}</div>
+          <div className={s.calWeekHead}>{["M", "T", "W", "T", "F", "S", "S"].map((d, i) => <span key={i}>{d}</span>)}</div>
+          <div className={s.calMonthGrid}>
+            {mo.cells.map((cell, i) => {
+              if (!cell) return <span key={i} />;
+              const inRange = cell >= data.start && cell <= data.end;
+              const future = cell > todayIso;
+              const n = data.counts[cell] ?? 0;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  disabled={!onSelectDay || !inRange || future}
+                  onClick={onSelectDay && inRange && !future ? () => onSelectDay(cell) : undefined}
+                  className={`${s.calDay} ${n ? s.calDayTrained : ""} ${cell === todayIso ? s.calDayToday : ""} ${cell === selected ? s.calDaySel : ""}`}
+                  style={{ background: inRange && !future ? fill(n) : "transparent", opacity: inRange && !future ? 1 : 0.3 }}
+                  title={`${shortDate(cell)} — ${n} workout${n === 1 ? "" : "s"}`}
+                >
+                  {Number(cell.slice(-2))}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div className={s.calLegend}>
+        <span><i style={{ background: "var(--surface-3)" }} /> rest day</span>
+        <span><i style={{ background: fill(1) }} /> trained</span>
+        <span><i style={{ background: fill(max) }} /> multiple sessions</span>
+        {onSelectDay && <span style={{ color: "var(--text-faint)" }}>· tap a day to filter the page</span>}
       </div>
     </div>
   );

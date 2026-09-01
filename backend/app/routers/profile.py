@@ -19,7 +19,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.daily_metric import DailyMetric
+from app.models.rejection import RejectionEvent
 from app.models.user import Injury, User
+from app.models.workout_log import WorkoutLog
 from app.schemas.user import InjuryCreate, InjuryOut, InjuryUpdate, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["profile"])
@@ -82,6 +85,14 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> UserOut:
     return UserOut.model_validate(user)
 
 
+@router.get("", response_model=list[UserOut])
+def list_users(db: Session = Depends(get_db), limit: int = 100) -> list[UserOut]:
+    """Every profile, newest first — powers the profile picker / switcher so a
+    freshly created profile shows up alongside the demo users."""
+    users = db.query(User).order_by(User.id.asc()).limit(limit).all()
+    return [UserOut.model_validate(u) for u in users]
+
+
 @router.get("/{user_id}", response_model=UserOut)
 def get_user(user_id: int, db: Session = Depends(get_db)) -> UserOut:
     user = _get_user_or_404(user_id, db)
@@ -99,7 +110,15 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(user_id: int, db: Session = Depends(get_db)) -> None:
+    """Delete a profile and everything attached to it. FK constraints aren't
+    enforced on the dev SQLite file, so related rows are removed explicitly to
+    avoid orphans (workout logs cascade to their exercises via the ORM
+    relationship; injuries cascade via the User relationship)."""
     user = _get_user_or_404(user_id, db)
+    db.query(RejectionEvent).filter(RejectionEvent.user_id == user_id).delete(synchronize_session=False)
+    db.query(DailyMetric).filter(DailyMetric.user_id == user_id).delete(synchronize_session=False)
+    for log in db.query(WorkoutLog).filter(WorkoutLog.user_id == user_id).all():
+        db.delete(log)
     db.delete(user)
     db.commit()
 

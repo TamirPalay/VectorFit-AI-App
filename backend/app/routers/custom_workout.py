@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -37,6 +37,7 @@ from app.schemas.custom_workout import (
     WorkoutMutationResponse,
     WorkoutUpdate,
 )
+from app.routers.workout_logs import _record_soft_dislike
 from app.schemas.workout import WorkoutLogOut
 from app.services.daily_program_engine import WORKOUT_TYPES
 from app.services.exercise_filters import ExerciseQuery, apply_filters, compute_facets, mechanic_of
@@ -554,22 +555,39 @@ def start_session(
     db: Session = Depends(get_db),
 ):
     """Clone this workout (usually a template) into a fresh session log. With no
-    `on` date it's stamped now and ready to run; with a date it's scheduled and
-    shows up on that day of the week view."""
+    `on` date it's stamped now and ready to run; with a date it's scheduled onto
+    that day of the week view (source="daily" so the weekly program picks it up),
+    replacing any incomplete daily workout already sitting on that date."""
     _get_user_or_404(user_id, db)
     src = _get_workout_or_404(user_id, workout_id, db)
-    started = (
-        datetime.combine(on, datetime.min.time(), tzinfo=timezone.utc).replace(hour=18)
-        if on else datetime.now(timezone.utc)
-    )
+
+    if on is not None:
+        started = datetime.combine(on, datetime.min.time(), tzinfo=timezone.utc).replace(hour=18)
+        day_start = datetime.combine(on, datetime.min.time(), tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+        clash = (
+            db.query(WorkoutLog)
+            .filter(
+                WorkoutLog.user_id == user_id,
+                WorkoutLog.source == "daily",
+                WorkoutLog.started_at >= day_start,
+                WorkoutLog.started_at < day_end,
+                WorkoutLog.completed_at.is_(None),
+            )
+            .first()
+        )
+        if clash is not None:
+            db.delete(clash)
+            db.flush()
+
     session = WorkoutLog(
         user_id=user_id,
         name=src.name,
         workout_type=src.workout_type,
-        source=_SOURCE,
+        source="daily" if on is not None else _SOURCE,
         is_template=False,
         notes=src.notes,
-        started_at=started,
+        started_at=started if on is not None else datetime.now(timezone.utc),
     )
     _clone_exercises(src, session)
     db.add(session)
@@ -606,6 +624,8 @@ def complete_session(
                 note="Auto-logged from custom workout completion",
                 created_at=datetime.now(timezone.utc),
             ))
+        elif perf.feedback == "disliked":
+            _record_soft_dislike(db, user_id, we.exercise_id, we.exercise_name)
 
     db.commit()
     db.refresh(log)

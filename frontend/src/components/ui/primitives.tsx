@@ -56,8 +56,16 @@ export function Button({
   );
 }
 
-export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={cx(s.iconBtn, className)} {...rest} />;
+export function IconButton({ className, title, ...rest }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  // Icon-only buttons carry an aria-label for screen readers; mirror it into a
+  // native title so sighted users get the same hover hint for free.
+  return (
+    <button
+      className={cx(s.iconBtn, className)}
+      title={title ?? rest["aria-label"]}
+      {...rest}
+    />
+  );
 }
 
 // ── Chip ──────────────────────────────────────────────────

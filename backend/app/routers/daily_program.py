@@ -50,29 +50,31 @@ def _to_out(log: WorkoutLog) -> WorkoutLogOut:
 async def generate_daily_program(
     user_id: int,
     force: bool = False,
+    train: bool = False,
     request: Request = None,
     db: Session = Depends(get_db),
 ):
     """
     Generate (or return today's already-generated) daily program.
 
-    force=true deletes today's plan and regenerates it from scratch. Note this
-    is different from a per-exercise swap: any exercise blocked by an active
-    injury/cooldown is already swapped automatically on every generation, with
-    the reason recorded on that exercise for the UI tooltip.
+    force=true deletes today's plan and regenerates it from scratch.
+    train=true additionally overrides a scheduled rest day — the user tapped
+    "train anyway", so build a workout even though the weekly quota is met.
+    Any exercise blocked by an active injury/cooldown is still swapped
+    automatically, with the reason recorded on that exercise for the UI tooltip.
     """
     user = _get_user_or_404(user_id, db)
     today = datetime.now(timezone.utc).date()
 
     existing = _find_log(db, user_id, today)
-    if existing and not force:
+    if existing and not force and not train:
         return DayProgramOut(day_index=0, date=today, is_rest=False, workout=_to_out(existing))
-    if existing and force:
+    if existing and (force or train):
         db.delete(existing)
         db.commit()
 
     engine = DailyProgramEngine(db=db, index=request.app.state.exercise_index)
-    day = await engine.generate_day(user, today, day_index=0)
+    day = await engine.generate_day(user, today, day_index=0, allow_rest=not train)
     log = engine.persist_day(user, day)
 
     return DayProgramOut(

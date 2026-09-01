@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { useUser } from "../context/UserContext";
 import { fmtDate } from "../lib/format";
-import { Button, Card, Loader, ErrorState, ProgressRing } from "../components/ui/primitives";
+import { Button, Card, Loader, ErrorState, ProgressRing, SectionTitle } from "../components/ui/primitives";
 import { useToast } from "../components/ui/Toast";
 import { SessionRunner } from "../components/workout/SessionRunner";
+import { AiNote } from "../components/ui/AiNote";
+import { MuscleMapPreview } from "../components/MuscleMapPreview";
 import { Flame, Sparkles } from "../components/icons";
 import s from "./Today.module.css";
 
@@ -18,10 +21,10 @@ export function Today() {
   const summaryQ = useQuery({ queryKey: ["dash", "summary", id], queryFn: () => api.dash.summary(id), staleTime: 120_000 });
 
   const generate = useMutation({
-    mutationFn: () => api.generateToday(id),
+    mutationFn: (opts?: { train?: boolean }) => api.generateToday(id, false, opts?.train ?? false),
     onSuccess: (d) => {
       qc.setQueryData(["today", id], d);
-      toast(d.is_rest ? "Rest day scheduled" : "Today's workout is ready");
+      toast(d.is_rest ? "Still a rest day — your quota's met" : "Today's workout is ready");
     },
     onError: (e: Error) => toast(e.message, "err"),
   });
@@ -77,8 +80,25 @@ export function Today() {
             </p>
           </div>
           <Button size="lg" loading={generate.isPending} onClick={() => generate.mutate()}>
-            Generate today's workout
+            {generate.isPending ? "Building your workout…" : "Generate today's workout"}
           </Button>
+          {generate.isPending && (
+            <p className="dim" style={{ fontSize: "0.82rem", maxWidth: "34ch" }}>
+              This can take 10–20s the first time — the AI coach is scoring workout types and
+              writing a reason for any injury swaps. It's cached after that.
+            </p>
+          )}
+          <AiNote kind="engine" details={
+            <>
+              The scheduler scores each workout type (push / pull / legs / upper / full body / core) on
+              goal fit, your equipment, how recently each movement pattern was trained (5-day decay), and
+              how often you reject exercises in it. Then every pick runs through the suggestibility engine —
+              anything your injury blocks is swapped automatically, and the <b>AI coach</b> writes a one-line
+              reason for each swap.
+            </>
+          }>
+            The app chooses today's type from your goals, recent training, and what your body can handle right now.
+          </AiNote>
         </Card>
       )}
 
@@ -89,17 +109,34 @@ export function Today() {
           <span className={s.big}>🌙</span>
           <h2>Rest day</h2>
           <p>You've hit your training target for the week. Light movement and a walk are perfect today.</p>
-          <Button variant="secondary" size="sm" loading={generate.isPending} onClick={() => generate.mutate()}>
-            Train anyway
-          </Button>
+          <div className="row gap-2 wrap center">
+            <Button variant="secondary" size="sm" loading={generate.isPending} onClick={() => generate.mutate({ train: true })}>
+              {generate.isPending ? "Building…" : "Train anyway"}
+            </Button>
+            <Link to="/plan">
+              <Button variant="ghost" size="sm">Browse your workouts</Button>
+            </Link>
+          </div>
         </Card>
       ) : day.workout ? (
-        <SessionRunner
-          log={day.workout}
-          userId={id}
-          warnings={day.warnings}
-          onChange={(updated) => qc.setQueryData(["today", id], { ...day, workout: updated })}
-        />
+        <>
+          <SessionRunner
+            log={day.workout}
+            userId={id}
+            warnings={day.warnings}
+            onChange={(updated) => qc.setQueryData(["today", id], { ...day, workout: updated })}
+          />
+          <Card>
+            <SectionTitle extra="projected">Muscle map</SectionTitle>
+            <p className="dim" style={{ fontSize: "0.82rem", margin: "4px 0 10px" }}>
+              What today's workout is set to hit — shaded by activation × sets across the session.
+            </p>
+            <MuscleMapPreview
+              userId={id}
+              items={day.workout.exercises.map((e) => ({ exercise_id: e.exercise_id, sets: e.sets }))}
+            />
+          </Card>
+        </>
       ) : null)}
     </div>
   );

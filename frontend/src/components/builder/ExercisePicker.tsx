@@ -5,11 +5,25 @@ import { SG_META, titleCase } from "../../lib/format";
 import { Sheet } from "../ui/Sheet";
 import { Chip, Pill, Spinner, Segmented } from "../ui/primitives";
 import { ExerciseDetailSheet } from "../ExerciseDetailSheet";
-import { Check, Info, Plus, Search } from "../icons";
-import type { Exercise, SgState } from "../../lib/types";
+import { Check, Info, Plus, Search, X } from "../icons";
+import { MUSCLE_LABEL } from "../../lib/muscleLabels";
+import type { Exercise, Facets, SgState } from "../../lib/types";
 import s from "../../screens/Builder.module.css";
 
 const BODY_PARTS = ["chest", "back", "shoulders", "arms", "core", "quads", "hamstrings", "glutes", "calves"];
+
+// Canonical display order; only those the current result set actually contains
+// (or the user has already picked) are shown as chips.
+const EQUIPMENT_ORDER = [
+  "bodyweight", "dumbbells", "barbell", "kettlebell", "kettlebells", "cables", "machines",
+  "resistance_bands", "pull_up_bar", "bench", "squat_rack", "trx",
+];
+function equipList(facets: Facets, selected: string[]): string[] {
+  const present = new Set([...Object.keys(facets.equipment ?? {}), ...selected]);
+  const ordered = EQUIPMENT_ORDER.filter((e) => present.has(e));
+  const extras = [...present].filter((e) => !EQUIPMENT_ORDER.includes(e)).sort();
+  return [...ordered, ...extras];
+}
 
 interface Row { exercise: Exercise; state?: SgState; mechanic: string; added: boolean }
 
@@ -20,12 +34,16 @@ interface Props {
   onAdd: (exerciseId: string) => void;
   adding: string | null;
   onClose: () => void;
+  /** pre-filter to a single muscle (set when opened from the muscle map) */
+  initialMuscle?: string | null;
 }
 
-export function ExercisePicker({ userId, workoutId, addedIds, onAdd, adding, onClose }: Props) {
+export function ExercisePicker({ userId, workoutId, addedIds, onAdd, adding, onClose, initialMuscle }: Props) {
   const [q, setQ] = useState("");
   const [mode, setMode] = useState<"suggested" | "all">("suggested");
+  const [muscle, setMuscle] = useState<string | null>(initialMuscle ?? null);
   const [bodyPart, setBodyPart] = useState<string | null>(null);
+  const [equipment, setEquipment] = useState<string[]>([]);
   const [mechanic, setMechanic] = useState<"compound" | "isolation" | null>(null);
   const [supportedOnly, setSupportedOnly] = useState(false);
   const [showBlocked, setShowBlocked] = useState(false);
@@ -33,9 +51,15 @@ export function ExercisePicker({ userId, workoutId, addedIds, onAdd, adding, onC
 
   const effectiveMode = q.trim() ? "all" : mode;
 
+  const toggleEquip = (e: string) =>
+    setEquipment((cur) => (cur.includes(e) ? cur.filter((x) => x !== e) : [...cur, e]));
+
   const query = {
     q: q.trim() || undefined,
     body_part: bodyPart ?? undefined,
+    muscle: muscle ?? undefined,
+    equipment: equipment.length ? equipment : undefined,
+    equipment_match: equipment.length ? "uses_any" : undefined,
     mechanic: mechanic ?? undefined,
     force_direction: supportedOnly ? "supported" : undefined,
     facets: true,
@@ -116,12 +140,22 @@ export function ExercisePicker({ userId, workoutId, addedIds, onAdd, adding, onC
           />
         )}
 
+        {muscle && (
+          <div className={s.chipRow}>
+            <button className="vf-chip on" onClick={() => setMuscle(null)}
+              title="Clear the muscle-map filter" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              From muscle map: {MUSCLE_LABEL[muscle] ?? titleCase(muscle)} <X width="0.8em" height="0.8em" />
+            </button>
+          </div>
+        )}
+
         <div className={s.chipRow}>
           <Chip active={mechanic === "compound"} onClick={() => setMechanic(mechanic === "compound" ? null : "compound")}>Compound</Chip>
           <Chip active={mechanic === "isolation"} onClick={() => setMechanic(mechanic === "isolation" ? null : "isolation")}>Isolation</Chip>
           <Chip active={supportedOnly} onClick={() => setSupportedOnly((v) => !v)}>Supported only</Chip>
           <Chip active={showBlocked} onClick={() => setShowBlocked((v) => !v)}>Show injury-blocked</Chip>
         </div>
+        <span className="eyebrow">Body part</span>
         <div className={s.chipRow}>
           {BODY_PARTS.map((bp) => (
             <Chip
@@ -131,6 +165,20 @@ export function ExercisePicker({ userId, workoutId, addedIds, onAdd, adding, onC
               onClick={() => setBodyPart(bodyPart === bp ? null : bp)}
             >
               {titleCase(bp)}
+            </Chip>
+          ))}
+        </div>
+
+        <span className="eyebrow">Equipment</span>
+        <div className={s.chipRow}>
+          {equipList(facets, equipment).map((eq) => (
+            <Chip
+              key={eq}
+              active={equipment.includes(eq)}
+              count={facets.equipment?.[eq]}
+              onClick={() => toggleEquip(eq)}
+            >
+              {titleCase(eq)}
             </Chip>
           ))}
         </div>

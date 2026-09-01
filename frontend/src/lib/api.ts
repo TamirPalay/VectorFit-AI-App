@@ -62,10 +62,12 @@ export function assetUrl(path: string, query?: Query): string {
 // ── Profile ────────────────────────────────────────────────
 export const api = {
   getUser: (id: number) => req<User>(`/users/${id}`),
+  listUsers: () => req<User[]>(`/users`),
   createUser: (body: Partial<User> & { name: string; email: string }) =>
     req<User>(`/users`, { method: "POST", ...json(body) }),
   updateUser: (id: number, body: Partial<User>) =>
     req<User>(`/users/${id}`, { method: "PATCH", ...json(body) }),
+  deleteUser: (id: number) => req<void>(`/users/${id}`, { method: "DELETE" }),
 
   addInjury: (id: number, body: Record<string, unknown>) =>
     req(`/users/${id}/injuries`, { method: "POST", ...json(body) }),
@@ -81,6 +83,10 @@ export const api = {
 
   // ── Suggestibility / substitution ───────────────────────
   explain: (id: number, exId: string) => req<ExplainResponse>(`/users/${id}/explain/${exId}`),
+  /** Fast, no-LLM substitute list (similarity + coverage only). */
+  substitutes: (id: number, exId: string, topK = 4) =>
+    req<{ exercise: Exercise; similarity: number; coverage: number; preference_score: number; rank_score: number }[]>(
+      `/users/${id}/substitute/${exId}`, { query: { top_k: topK } }),
   suggestibilityBatch: (id: number, exerciseIds: string[]) =>
     req<{ exercise_id: string; state: string; suppression_reason: string | null }[]>(
       `/users/${id}/suggestibility/batch`, { method: "POST", body: JSON.stringify({ exercise_ids: exerciseIds }) }),
@@ -90,8 +96,8 @@ export const api = {
 
   // ── Daily / weekly program ──────────────────────────────
   today: (id: number) => req<DayProgram>(`/users/${id}/daily-program/today`),
-  generateToday: (id: number, force = false) =>
-    req<DayProgram>(`/users/${id}/daily-program`, { method: "POST", query: { force } }),
+  generateToday: (id: number, force = false, train = false) =>
+    req<DayProgram>(`/users/${id}/daily-program`, { method: "POST", query: { force, train } }),
   week: (id: number) => req<WeekProgram>(`/users/${id}/weekly-program`),
   generateWeek: (id: number, force = false) =>
     req<WeekProgram>(`/users/${id}/weekly-program`, { method: "POST", query: { force } }),
@@ -166,6 +172,22 @@ export const api = {
 
   muscleMapSvg: (id: number, query?: Query): string =>
     assetUrl(`/users/${id}/dashboard/muscle-map`, { ...query, format: "svg" }),
+
+  /** Anatomical map rendered from an arbitrary exercise list (a planned or
+   *  in-progress workout) — plain activation×sets arithmetic, no history. */
+  muscleMapPreview: async (
+    id: number,
+    items: { exercise_id: string; sets: number }[],
+    query?: Query,
+  ): Promise<string> => {
+    const res = await fetch(`${API_BASE}/users/${id}/dashboard/muscle-map/preview${qs(query)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    if (!res.ok) throw new ApiError(res.status, "Couldn't build the muscle map");
+    return res.text();
+  },
 };
 
 export type Api = typeof api;
