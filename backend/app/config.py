@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./vectorfit.db"
 
     # App
-    frontend_origin: str = "http://localhost:5173"
+    frontend_origin: str = "http://localhost:5173"  # single URL or comma-separated list
     secret_key: str = "change_me"
+    seed_on_startup: bool = True  # seed demo data when the DB is empty (see app.main)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

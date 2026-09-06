@@ -568,7 +568,10 @@ Try:
 """)
 
 
-if __name__ == "__main__":
+def run_seed() -> None:
+    """Seed all demo data. Every step is idempotent (guards on existing rows),
+    so this is safe to call on every server startup — used by app.main on hosts
+    with an ephemeral database."""
     db = SessionLocal()
     try:
         seed_tamir(db)
@@ -578,3 +581,7 @@ if __name__ == "__main__":
         seed_history(db)
     finally:
         db.close()
+
+
+if __name__ == "__main__":
+    run_seed()
