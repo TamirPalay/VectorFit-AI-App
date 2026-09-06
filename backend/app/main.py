@@ -21,9 +21,13 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# FRONTEND_ORIGIN may be a single URL or a comma-separated list (prod + previews).
+_allowed_origins = [o.strip() for o in settings.frontend_origin.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # Vercel preview deploys
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,8 +47,26 @@ app.include_router(dashboard.router)
 
 @app.on_event("startup")
 def startup():
-    """Create database tables and load the exercise index into app.state."""
+    """Create tables, optionally seed demo data, and load the exercise index."""
     Base.metadata.create_all(bind=engine)
+
+    # On hosts with an ephemeral disk (e.g. Render free tier) the SQLite file is
+    # wiped on every deploy/restart. Re-seed the demo users on boot if the DB is
+    # empty. run_seed() is idempotent, so this is a no-op once data exists.
+    if settings.seed_on_startup:
+        from app.database import SessionLocal
+        from app.models.user import User
+        db = SessionLocal()
+        try:
+            if db.query(User).count() == 0:
+                print("[startup] Empty database - seeding demo data...")
+                from app.data.seed_demo import run_seed
+                run_seed()
+                print("[startup] Seed complete.")
+        except Exception as exc:  # don't let a seed failure block app boot
+            print(f"[startup] WARNING: demo seed failed: {exc!r}")
+        finally:
+            db.close()
 
     from app.ml.embeddings import ExerciseIndex
     app.state.exercise_index = ExerciseIndex.load()

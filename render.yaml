@@ -1,0 +1,31 @@
+# Render blueprint for the VectorFit backend (FastAPI).
+# Deploy: render.com → New → Blueprint → pick this repo.
+# GEMINI_API_KEY and FRONTEND_ORIGIN are marked sync:false — set them in the
+# Render dashboard after the first deploy (FRONTEND_ORIGIN = your Vercel URL).
+services:
+  - type: web
+    name: vectorfit-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.9"
+      - key: PYTHONIOENCODING
+        value: "utf-8"
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: SEED_ON_STARTUP
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false

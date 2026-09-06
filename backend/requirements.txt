@@ -4,7 +4,6 @@ uvicorn[standard]==0.30.6
 
 # ── Database ───────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.35
-alembic==1.13.2
 
 # ── Validation ─────────────────────────────────────────────────────────────────
 pydantic==2.12.5
@@ -19,10 +18,11 @@ groq==0.11.0
 google-genai==2.19.0
 
 # ── ML / Embeddings ────────────────────────────────────────────────────────────
+# The 22-dim muscle-activation vectors are precomputed in data/exercises.json, so
+# sentence-transformers / torch are NOT needed at runtime — they were used offline
+# once during the data pipeline. Keeping them out cuts the deploy image by ~2 GB.
 numpy==1.26.4
 faiss-cpu==1.8.0
-sentence-transformers==3.1.1
-scikit-learn==1.5.2
 
 # ── Data analysis (dashboard) ──────────────────────────────────────────────────
 pandas==2.2.3
